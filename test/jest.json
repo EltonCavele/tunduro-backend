@@ -1,0 +1,43 @@
+{
+    "testTimeout": 5000,
+    "rootDir": "../",
+    "modulePaths": ["."],
+    "testEnvironment": "node",
+    "testMatch": ["<rootDir>/test/**/*.spec.ts"],
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+        "<rootDir>/src/**/*.service.ts",
+        "!<rootDir>/src/**/*.spec.ts",
+        "!<rootDir>/src/**/*.mock.ts",
+        "!<rootDir>/src/common/database/services/database.service.ts",
+        "!<rootDir>/src/common/logger/services/logger.service.ts",
+        "!<rootDir>/src/workers/schedulers/midnight.scheduler.ts"
+    ],
+    "coverageThreshold": {
+        "global": {
+            "branches": 90,
+            "functions": 90,
+            "lines": 90,
+            "statements": 90
+        }
+    },
+    "coverageReporters": ["html", "lcov", "json-summary"],
+    "moduleFileExtensions": ["js", "ts", "json"],
+    "coverageProvider": "v8",
+    "transform": {
+        "^.+\\.(t|j)sx?$": [
+            "@swc/jest",
+            {
+                "sourceMaps": true
+            }
+        ]
+    },
+    "moduleNameMapper": {
+        "^@faker-js/faker$": "<rootDir>/test/mocks/faker.mock.ts",
+        "^ws$": "<rootDir>/test/mocks/ws.mock.ts",
+        "^@grpc/grpc-js$": "<rootDir>/test/mocks/grpc.mock.ts",
+        "^@grpc/proto-loader$": "<rootDir>/test/mocks/proto-loader.mock.ts"
+    },
+    "modulePathIgnorePatterns": ["<rootDir>/dist"]
+}
