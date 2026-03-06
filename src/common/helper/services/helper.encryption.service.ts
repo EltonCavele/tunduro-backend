@@ -3,27 +3,27 @@ import {
   scrypt,
   createCipheriv,
   createDecipheriv,
-} from 'node:crypto';
-import { promisify } from 'node:util';
+} from "node:crypto";
+import { promisify } from "node:util";
 
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import type { StringValue } from 'ms';
-import * as argon2 from 'argon2';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import type { StringValue } from "ms";
+import * as argon2 from "argon2";
 
-import { IAuthUser } from 'src/common/request/interfaces/request.interface';
+import { IAuthUser } from "src/common/request/interfaces/request.interface";
 
 import {
   IAuthTokenResponse,
   IEncryptDataPayload,
-} from '../interfaces/encryption.interface';
-import { IHelperEncryptionService } from '../interfaces/encryption.service.interface';
+} from "../interfaces/encryption.interface";
+import { IHelperEncryptionService } from "../interfaces/encryption.service.interface";
 
 @Injectable()
 export class HelperEncryptionService implements IHelperEncryptionService {
   private readonly logger = new Logger(HelperEncryptionService.name);
-  private readonly algorithm = 'aes-256-gcm';
+  private readonly algorithm = "aes-256-gcm";
   private readonly keyLength = 32;
   private readonly saltLength = 16;
   private readonly ivLength = 12;
@@ -36,24 +36,24 @@ export class HelperEncryptionService implements IHelperEncryptionService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
   ) {
     this.accessTokenSecret = this.configService.getOrThrow<string>(
-      'auth.accessToken.secret'
+      "auth.accessToken.secret",
     );
     this.refreshTokenSecret = this.configService.getOrThrow<string>(
-      'auth.refreshToken.secret'
+      "auth.refreshToken.secret",
     );
     this.accessTokenExpire = this.configService.getOrThrow<string>(
-      'auth.accessToken.tokenExp'
+      "auth.accessToken.tokenExp",
     );
     this.refreshTokenExpire = this.configService.getOrThrow<string>(
-      'auth.refreshToken.tokenExp'
+      "auth.refreshToken.tokenExp",
     );
   }
 
   public async createJwtTokens(
-    payload: IAuthUser
+    payload: IAuthUser,
   ): Promise<IAuthTokenResponse> {
     const [accessToken, refreshToken] = await Promise.all([
       this.createAccessToken(payload),
@@ -93,16 +93,16 @@ export class HelperEncryptionService implements IHelperEncryptionService {
       authTagLength: this.tagLength,
     });
     const encrypted = Buffer.concat([
-      cipher.update(text, 'utf8'),
+      cipher.update(text, "utf8"),
       cipher.final(),
     ]);
     const tag = cipher.getAuthTag();
 
     return {
-      iv: iv.toString('hex'),
-      data: encrypted.toString('hex'),
-      tag: tag.toString('hex'),
-      salt: salt.toString('hex'),
+      iv: iv.toString("hex"),
+      data: encrypted.toString("hex"),
+      tag: tag.toString("hex"),
+      salt: salt.toString("hex"),
     };
   }
 
@@ -115,24 +115,24 @@ export class HelperEncryptionService implements IHelperEncryptionService {
     try {
       const key = await this.deriveKey(
         this.accessTokenSecret,
-        Buffer.from(salt, 'hex')
+        Buffer.from(salt, "hex"),
       );
       const decipher = createDecipheriv(
         this.algorithm,
         key,
-        Buffer.from(iv, 'hex'),
+        Buffer.from(iv, "hex"),
         {
           authTagLength: this.tagLength,
-        }
+        },
       );
-      decipher.setAuthTag(Buffer.from(tag, 'hex'));
+      decipher.setAuthTag(Buffer.from(tag, "hex"));
 
       const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(data, 'hex')),
+        decipher.update(Buffer.from(data, "hex")),
         decipher.final(),
       ]);
 
-      return decrypted.toString('utf8');
+      return decrypted.toString("utf8");
     } catch (error) {
       throw error;
     }

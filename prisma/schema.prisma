@@ -7,23 +7,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+  TRAINER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
 model User {
-  id         String    @id @default(uuid())
-  email      String    @unique
-  password   String
-  firstName  String?   @map("first_name")
-  lastName   String?   @map("last_name")
-  isVerified Boolean   @default(false) @map("is_verified")
-  phone      String?
-  role       Role      @default(USER)
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  deletedAt  DateTime? @map("deleted_at")
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  password           String
+  firstName          String?
+  lastName           String?
+  avatarUrl          String?
+  level              String?
+  favoriteCourt      String?
+  preferredTimeSlots String[]  @default([])
+  isVerified         Boolean   @default(false)
+  phone              String?
+  expoPushToken      String?
+  gender             Gender
+  notifyPush         Boolean   @default(true)
+  notifySms          Boolean   @default(true)
+  notifyEmail        Boolean   @default(true)
+  tokenVersion       Int       @default(0)
+  role               Role      @default(USER)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  userOtps UserOtp[]
 
   @@map("users")
 }
 
-enum Role {
-  USER
-  ADMIN
+model UserOtp {
+  id        String   @id @default(uuid())
+  userId    String
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_otps")
 }
