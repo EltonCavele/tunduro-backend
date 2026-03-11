@@ -1,0 +1,476 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpStatus,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+
+import { DocPaginatedResponse } from 'src/common/doc/decorators/doc.paginated.decorator';
+import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
+import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
+import { IAuthUser } from 'src/common/request/interfaces/request.interface';
+import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
+
+import {
+  BookingCancelRequestDto,
+  BookingCheckInRequestDto,
+  BookingCreateRequestDto,
+  BookingInvitationRespondRequestDto,
+  BookingInviteRequestDto,
+  BookingMeQueryRequestDto,
+  BookingMockPaymentConfirmRequestDto,
+  BookingRescheduleRequestDto,
+  CourtRatingCreateRequestDto,
+  CourtRatingUpdateRequestDto,
+  OpenGameCreateRequestDto,
+  OpenGamesListQueryRequestDto,
+  OvertimeRequestCreateDto,
+  WaitlistCreateRequestDto,
+} from '../dtos/request/booking.request';
+import {
+  BookingCheckInQrResponseDto,
+  BookingResponseDto,
+  CourtRatingResponseDto,
+  OpenGameResponseDto,
+  OvertimeRequestResponseDto,
+  WaitlistResponseDto,
+} from '../dtos/response/booking.response';
+import { BookingOvertimeService } from '../services/booking.overtime.service';
+import { BookingService } from '../services/booking.service';
+
+@ApiTags('public.bookings')
+@Controller({
+  version: '1',
+})
+export class BookingPublicController {
+  constructor(
+    private readonly bookingService: BookingService,
+    private readonly bookingOvertimeService: BookingOvertimeService
+  ) {}
+
+  @Post('/bookings')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Create booking (single or recurring)' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'booking.success.created',
+  })
+  async createBooking(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: BookingCreateRequestDto
+  ): Promise<BookingResponseDto | BookingResponseDto[]> {
+    return this.bookingService.createBooking(user, payload);
+  }
+
+  @Post('/bookings/:id/payments/mock/confirm')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Confirm mock payment for booking or series' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.paymentConfirmed',
+  })
+  async confirmPayment(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingMockPaymentConfirmRequestDto
+  ): Promise<BookingResponseDto | BookingResponseDto[]> {
+    return this.bookingService.confirmBookingPayment(user, bookingId, payload);
+  }
+
+  @Get('/bookings/me')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'List current user bookings' })
+  @DocPaginatedResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.list',
+  })
+  async getMyBookings(
+    @AuthUser() user: IAuthUser,
+    @Query() query: BookingMeQueryRequestDto
+  ): Promise<ApiPaginatedDataDto<BookingResponseDto>> {
+    return this.bookingService.getMyBookings(user.userId, query);
+  }
+
+  @Get('/bookings/:id')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get booking details with status timeline' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.details',
+  })
+  async getBooking(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.getBookingForUser(user, bookingId);
+  }
+
+  @Post('/bookings/:id/cancel')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Cancel booking with policy enforcement' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.cancelled',
+  })
+  async cancelBooking(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingCancelRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.cancelBooking(user, bookingId, payload);
+  }
+
+  @Post('/bookings/:id/reschedule')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Reschedule booking with policy enforcement' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.rescheduled',
+  })
+  async rescheduleBooking(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingRescheduleRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.rescheduleBooking(user, bookingId, payload);
+  }
+
+  @Post('/bookings/:id/invitations')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Invite users/emails to booking' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationSent',
+  })
+  async inviteParticipants(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingInviteRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.inviteParticipants(user, bookingId, payload);
+  }
+
+  @Post('/bookings/:id/invitations/:invitationId/resend')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Resend invitation' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationResent',
+  })
+  async resendInvitation(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Param('invitationId') invitationId: string
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.resendInvitation(user, bookingId, invitationId);
+  }
+
+  @Delete('/bookings/:id/invitations/:invitationId')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Revoke invitation' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationRemoved',
+  })
+  async removeInvitation(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Param('invitationId') invitationId: string
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.removeInvitation(user, bookingId, invitationId);
+  }
+
+  @Post('/invitations/:token/respond')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Respond to invitation token' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationResponded',
+  })
+  async respondInvitation(
+    @AuthUser() user: IAuthUser,
+    @Param('token') token: string,
+    @Body() payload: BookingInvitationRespondRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.respondInvitation(user, token, payload);
+  }
+
+  @Post('/bookings/:id/participants/:participantUserId/remove')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Remove participant from booking' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.participantRemoved',
+  })
+  async removeParticipant(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Param('participantUserId') participantUserId: string
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.removeParticipant(
+      user,
+      bookingId,
+      participantUserId
+    );
+  }
+
+  @Post('/waitlist')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Join waitlist for specific court slot' })
+  @DocResponse({
+    serialization: WaitlistResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'waitlist.success.created',
+  })
+  async createWaitlistEntry(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: WaitlistCreateRequestDto
+  ): Promise<WaitlistResponseDto> {
+    return this.bookingService.createWaitlistEntry(user, payload);
+  }
+
+  @Get('/waitlist/me')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'List my waitlist entries' })
+  @DocResponse({
+    serialization: WaitlistResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'waitlist.success.list',
+  })
+  async getMyWaitlist(
+    @AuthUser() user: IAuthUser
+  ): Promise<WaitlistResponseDto[]> {
+    return this.bookingService.getMyWaitlist(user.userId);
+  }
+
+  @Post('/waitlist/:id/accept-offer')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Accept waitlist offer and claim pending booking' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'waitlist.success.offerAccepted',
+  })
+  async acceptWaitlistOffer(
+    @AuthUser() user: IAuthUser,
+    @Param('id') waitlistId: string
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.acceptWaitlistOffer(user, waitlistId);
+  }
+
+  @Get('/bookings/:id/checkin-qr')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get check-in QR payload/token' })
+  @DocResponse({
+    serialization: BookingCheckInQrResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkInQr',
+  })
+  async getCheckInQr(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string
+  ): Promise<BookingCheckInQrResponseDto> {
+    return this.bookingService.getCheckInQr(user, bookingId);
+  }
+
+  @Post('/bookings/:id/checkin')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Check-in booking session' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkedIn',
+  })
+  async checkIn(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingCheckInRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.checkIn(user, bookingId, payload);
+  }
+
+  @Post('/bookings/:id/open-games')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Create open game from confirmed booking' })
+  @DocResponse({
+    serialization: OpenGameResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'openGame.success.created',
+  })
+  async createOpenGame(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: OpenGameCreateRequestDto
+  ): Promise<OpenGameResponseDto> {
+    return this.bookingService.createOpenGame(user, bookingId, payload);
+  }
+
+  @Get('/open-games')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'List open games' })
+  @DocPaginatedResponse({
+    serialization: OpenGameResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'openGame.success.list',
+  })
+  async listOpenGames(
+    @Query() query: OpenGamesListQueryRequestDto
+  ): Promise<ApiPaginatedDataDto<OpenGameResponseDto>> {
+    return this.bookingService.listOpenGames(query);
+  }
+
+  @Post('/open-games/:id/join-requests')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Request to join open game' })
+  @DocResponse({
+    serialization: OpenGameResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'openGame.success.requestCreated',
+  })
+  async requestJoinOpenGame(
+    @AuthUser() user: IAuthUser,
+    @Param('id') openGameId: string
+  ): Promise<OpenGameResponseDto> {
+    return this.bookingService.requestJoinOpenGame(user, openGameId);
+  }
+
+  @Post('/open-games/:id/join-requests/:requestId/approve')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Approve join request' })
+  @DocResponse({
+    serialization: OpenGameResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'openGame.success.requestApproved',
+  })
+  async approveJoinRequest(
+    @AuthUser() user: IAuthUser,
+    @Param('id') openGameId: string,
+    @Param('requestId') requestId: string
+  ): Promise<OpenGameResponseDto> {
+    return this.bookingService.handleJoinRequest(
+      user,
+      openGameId,
+      requestId,
+      true
+    );
+  }
+
+  @Post('/open-games/:id/join-requests/:requestId/decline')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Decline join request' })
+  @DocResponse({
+    serialization: OpenGameResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'openGame.success.requestDeclined',
+  })
+  async declineJoinRequest(
+    @AuthUser() user: IAuthUser,
+    @Param('id') openGameId: string,
+    @Param('requestId') requestId: string
+  ): Promise<OpenGameResponseDto> {
+    return this.bookingService.handleJoinRequest(
+      user,
+      openGameId,
+      requestId,
+      false
+    );
+  }
+
+  @Post('/bookings/:id/ratings')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Create court rating for completed booking' })
+  @DocResponse({
+    serialization: CourtRatingResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'rating.success.created',
+  })
+  async createRating(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: CourtRatingCreateRequestDto
+  ): Promise<CourtRatingResponseDto> {
+    return this.bookingService.createRating(user, bookingId, payload);
+  }
+
+  @Put('/bookings/:id/ratings/me')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Update own rating within 24h window' })
+  @DocResponse({
+    serialization: CourtRatingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'rating.success.updated',
+  })
+  async updateRating(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: CourtRatingUpdateRequestDto
+  ): Promise<CourtRatingResponseDto> {
+    return this.bookingService.updateRating(user, bookingId, payload);
+  }
+
+  @Post('/bookings/:id/overtime-requests')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Create overtime request for a booking' })
+  @DocResponse({
+    serialization: OvertimeRequestResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'booking.success.overtimeRequested',
+  })
+  async createOvertimeRequest(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: OvertimeRequestCreateDto
+  ): Promise<OvertimeRequestResponseDto> {
+    return this.bookingOvertimeService.createRequest(user, bookingId, payload);
+  }
+
+  @Get('/bookings/:id/overtime-requests/me')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'List overtime requests related to booking for current user' })
+  @DocResponse({
+    serialization: OvertimeRequestResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.overtimeList',
+  })
+  async listMyOvertimeRequests(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string
+  ): Promise<OvertimeRequestResponseDto[]> {
+    return this.bookingOvertimeService.listMyRequests(user, bookingId);
+  }
+
+  @Post('/overtime-requests/:id/payments/mock/confirm')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Confirm mock payment for overtime request' })
+  @DocResponse({
+    serialization: OvertimeRequestResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.overtimePaymentConfirmed',
+  })
+  async confirmOvertimePayment(
+    @AuthUser() user: IAuthUser,
+    @Param('id') overtimeRequestId: string
+  ): Promise<OvertimeRequestResponseDto> {
+    return this.bookingOvertimeService.confirmOvertimePayment(
+      user,
+      overtimeRequestId
+    );
+  }
+}

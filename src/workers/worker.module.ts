@@ -2,14 +2,15 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { HelperModule } from 'src/common/helper/helper.module';
-import { WebhookModule } from 'src/modules/webhook/webhook.module';
+import { BookingModule } from 'src/modules/booking/booking.module';
+import { LightingModule } from 'src/modules/lighting/lighting.module';
 
+import { BookingScheduler } from './schedulers/booking.scheduler';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
-import { WebhookScheduler } from './schedulers/webhook.scheduler';
 
 @Module({
-  imports: [HelperModule, ScheduleModule.forRoot(), WebhookModule],
-  providers: [MidNightScheduleWorker, WebhookScheduler],
+  imports: [HelperModule, BookingModule, LightingModule, ScheduleModule.forRoot()],
+  providers: [MidNightScheduleWorker, BookingScheduler],
   exports: [MidNightScheduleWorker],
 })
 export class WorkerModule {}

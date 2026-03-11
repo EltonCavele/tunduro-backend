@@ -1,0 +1,27 @@
+{
+  "success": {
+    "configFetched": "Lighting configuration retrieved successfully",
+    "configUpdated": "Lighting configuration updated successfully",
+    "overrideApplied": "Lighting override command processed",
+    "commandSent": "Lighting command sent successfully",
+    "deviceStatus": "Lighting device status retrieved successfully",
+    "testSwitch": "Lighting test switch command processed",
+    "auditList": "Lighting audit logs retrieved successfully"
+  },
+  "error": {
+    "tuyaConfigMissing": "Tuya configuration is missing",
+    "tuyaToken": "Failed to obtain Tuya token",
+    "tuyaTokenUnavailable": "Tuya token is unavailable",
+    "tuyaApi": "Tuya API returned an error",
+    "quietHoursBlocked": "Automatic lighting is blocked during quiet hours",
+    "lightingDisabledForCourt": "Lighting is disabled for this court",
+    "courtDeviceNotMapped": "Court has no Tuya device mapping",
+    "unsupportedCommand": "One or more commands are not supported",
+    "invalidCountdown": "countdown_1 must be an integer between 0 and 86400",
+    "invalidRelayStatus": "relay_status must be 0, 1 or 2",
+    "invalidQuietHoursStart": "Invalid quiet hours start format (HH:mm)",
+    "invalidQuietHoursEnd": "Invalid quiet hours end format (HH:mm)",
+    "courtHasNoLightingHardware": "Court has no lighting hardware",
+    "deviceStatusUnavailable": "Unable to fetch live device status"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "success": {
+    "created": "Open game created successfully",
+    "list": "Open games retrieved successfully",
+    "requestCreated": "Join request created successfully",
+    "requestApproved": "Join request approved successfully",
+    "requestDeclined": "Join request declined successfully"
+  },
+  "error": {
+    "notFound": "Open game not found",
+    "notOpen": "Open game is not open for requests",
+    "alreadyParticipant": "You are already a participant in this session",
+    "requestAlreadyExists": "A pending join request already exists",
+    "requestNotFound": "Join request not found",
+    "requestAlreadyHandled": "Join request already handled",
+    "alreadyFull": "Open game is already full",
+    "onlyConfirmedBookingAllowed": "Open game can only be created for confirmed bookings"
+  }
+}

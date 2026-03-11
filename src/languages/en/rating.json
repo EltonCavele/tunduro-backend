@@ -1,0 +1,11 @@
+{
+  "success": {
+    "created": "Rating created successfully",
+    "updated": "Rating updated successfully"
+  },
+  "error": {
+    "notFound": "Rating not found",
+    "bookingMustBeCompleted": "Booking must be completed before rating",
+    "editWindowExpired": "Rating edit window has expired"
+  }
+}

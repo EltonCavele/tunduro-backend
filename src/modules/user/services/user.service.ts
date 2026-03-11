@@ -277,6 +277,6 @@ export class UserService implements IUserService {
         ? safeUser.preferredTimeSlots
         : [],
       ...this.getPreferencesFromUser(user),
-    };
+    } as unknown as T;
   }
 }

@@ -1,0 +1,17 @@
+{
+  "success": {
+    "list": "Courts retrieved successfully",
+    "details": "Court details retrieved successfully",
+    "bookings": "Court bookings retrieved successfully",
+    "created": "Court created successfully",
+    "updated": "Court updated successfully",
+    "deleted": "Court deleted successfully",
+    "restored": "Court restored successfully",
+    "galleryPresign": "Gallery upload URL generated successfully",
+    "galleryUpdated": "Court gallery updated successfully"
+  },
+  "error": {
+    "notFound": "Court not found",
+    "galleryLimitExceeded": "Court gallery supports up to 10 images"
+  }
+}

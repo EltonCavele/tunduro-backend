@@ -1,0 +1,7 @@
+{
+  "mpesa": {
+    "error": {
+      "default": "Payment provider returned an error"
+    }
+  }
+}

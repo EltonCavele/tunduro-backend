@@ -175,7 +175,7 @@ describe('HelperEncryptionService', () => {
         it('should work with different payload types', async () => {
             const developerPayload: IAuthUser = {
                 userId: 'dev-456',
-                role: 'DEVELOPER',
+                role: 'TRAINER',
             };
             jwtServiceMock.signAsync.mockResolvedValue('devAccessToken');
 

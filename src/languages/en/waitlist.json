@@ -1,0 +1,13 @@
+{
+  "success": {
+    "created": "Waitlist entry created successfully",
+    "list": "Waitlist entries retrieved successfully",
+    "offerAccepted": "Waitlist offer accepted successfully"
+  },
+  "error": {
+    "notFound": "Waitlist entry not found",
+    "slotStillAvailable": "Slot is still available, waitlist is not needed",
+    "invalidStateToAccept": "Waitlist entry cannot be accepted in current status",
+    "offerExpired": "Waitlist offer has expired"
+  }
+}
