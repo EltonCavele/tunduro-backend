@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 
 import { TuyaAuthService } from './tuya-auth.service';
 import { getRequestSign } from './tuya.sign';
@@ -29,7 +29,9 @@ export class TuyaClientService {
   }
 
   async sendSwitch(deviceId: string, on: boolean): Promise<unknown> {
-    return this.sendDeviceCommand(deviceId, [{ code: 'switch_1', value: !!on }]);
+    return this.sendDeviceCommand(deviceId, [
+      { code: 'switch_1', value: !!on },
+    ]);
   }
 
   async getDevice(deviceId: string): Promise<any> {
@@ -39,8 +41,7 @@ export class TuyaClientService {
   private async request(
     method: 'GET' | 'POST',
     path: string,
-    body?: unknown,
-    retried = false
+    body: Record<string, unknown> | null = null
   ): Promise<any> {
     const clientId = this.configService.get<string>('tuya.clientId') || '';
     const clientSecret =
@@ -56,31 +57,29 @@ export class TuyaClientService {
       throw new Error('lighting.error.tuyaTokenUnavailable');
     }
 
+    const requestBody = body ?? {};
     const signed = getRequestSign(
       clientId,
       clientSecret,
       accessToken,
-      method,
       path,
-      body
+      method,
+      requestBody
     );
 
     const { path: requestPath, ...headers } = signed;
 
-    const requestConfig: AxiosRequestConfig = {
-      method,
-      baseURL: baseUrl,
-      url: requestPath,
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
-      timeout: this.getTimeoutMs(),
-      data: method === 'GET' ? undefined : body,
-    };
-
     try {
-      const { data } = await axios(requestConfig);
+      const { data } = await axios({
+        method,
+        baseURL: baseUrl,
+        url: requestPath,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        data: Object.keys(requestBody).length ? requestBody : undefined,
+      });
 
       if (!data?.success) {
         throw new Error(data?.msg || data?.message || 'lighting.error.tuyaApi');
@@ -88,12 +87,6 @@ export class TuyaClientService {
 
       return data.result;
     } catch (error: any) {
-      const statusCode = error?.response?.status;
-      if ((statusCode === 401 || statusCode === 403) && !retried) {
-        await this.tuyaAuthService.refreshAccessToken();
-        return this.request(method, path, body, true);
-      }
-
       const message =
         error?.response?.data?.msg ||
         error?.response?.data?.message ||
@@ -103,13 +96,5 @@ export class TuyaClientService {
       this.logger.error(`Tuya request failed: ${message}`);
       throw new Error(message);
     }
-  }
-
-  private getTimeoutMs(): number {
-    const timeout = this.configService.get<number>('tuya.requestTimeoutMs');
-    if (!timeout || Number.isNaN(timeout)) {
-      return 10000;
-    }
-    return timeout;
   }
 }

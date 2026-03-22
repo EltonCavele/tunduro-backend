@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CourtType } from '@prisma/client';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -138,21 +138,25 @@ export class CourtListQueryRequestDto {
 
   @ApiPropertyOptional({ example: 500 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   priceMin?: number;
 
   @ApiPropertyOptional({ example: 2500 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   priceMax?: number;
 
   @ApiPropertyOptional({ example: 1, default: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   page?: number;
 
   @ApiPropertyOptional({ example: 10, default: 10 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   pageSize?: number;
 
@@ -170,11 +174,13 @@ export class CourtListQueryRequestDto {
 export class CourtBookingsQueryRequestDto {
   @ApiPropertyOptional({ example: 1, default: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   page?: number;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   pageSize?: number;
 

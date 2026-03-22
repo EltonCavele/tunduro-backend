@@ -7,9 +7,9 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -30,7 +30,8 @@ export class BookingRecurrenceRequestDto {
 
 export class BookingCreateRequestDto {
   @ApiProperty({ example: 'court-id' })
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   courtId: string;
 
   @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
@@ -45,7 +46,8 @@ export class BookingCreateRequestDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUUID(undefined, { each: true })
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
   participantUserIds?: string[];
 
   @ApiPropertyOptional({ type: [String], example: ['friend@example.com'] })
@@ -67,6 +69,29 @@ export class BookingCreateRequestDto {
   recurrence?: BookingRecurrenceRequestDto;
 }
 
+export class BookingCheckoutCreateRequestDto {
+  @ApiProperty({ example: 'court-id' })
+  @IsString()
+  @IsNotEmpty()
+  courtId: string;
+
+  @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
+  @IsString()
+  startAt: string;
+
+  @ApiProperty({ example: '2026-03-20T17:00:00.000Z' })
+  @IsString()
+  endAt: string;
+
+  @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  participantUserIds?: string[];
+}
+
 export class BookingMockPaymentConfirmRequestDto {
   @ApiPropertyOptional({ example: false, default: false })
   @IsOptional()
@@ -85,7 +110,8 @@ export class BookingCancelRequestDto {
 export class BookingRescheduleRequestDto {
   @ApiPropertyOptional({ example: 'new-court-id' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   courtId?: string;
 
   @ApiProperty({ example: '2026-03-21T18:00:00.000Z' })
@@ -102,7 +128,8 @@ export class BookingInviteRequestDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUUID(undefined, { each: true })
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
   userIds?: string[];
 
   @ApiPropertyOptional({ type: [String] })
@@ -126,7 +153,8 @@ export class BookingInvitationRespondRequestDto {
 
 export class WaitlistCreateRequestDto {
   @ApiProperty()
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   courtId: string;
 
   @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
@@ -224,12 +252,14 @@ export class CourtRatingUpdateRequestDto {
 export class BookingMeQueryRequestDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)

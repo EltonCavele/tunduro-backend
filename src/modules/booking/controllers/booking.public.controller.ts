@@ -3,11 +3,15 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  HttpCode,
   HttpStatus,
   Param,
   Post,
   Put,
   Query,
+  Req,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -18,6 +22,7 @@ import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 
 import {
+  BookingCheckoutCreateRequestDto,
   BookingCancelRequestDto,
   BookingCheckInRequestDto,
   BookingCreateRequestDto,
@@ -34,6 +39,7 @@ import {
   WaitlistCreateRequestDto,
 } from '../dtos/request/booking.request';
 import {
+  BookingCheckoutSessionResponseDto,
   BookingCheckInQrResponseDto,
   BookingResponseDto,
   CourtRatingResponseDto,
@@ -67,6 +73,92 @@ export class BookingPublicController {
     @Body() payload: BookingCreateRequestDto
   ): Promise<BookingResponseDto | BookingResponseDto[]> {
     return this.bookingService.createBooking(user, payload);
+  }
+
+  @Post('/bookings/checkout')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Start hosted payment checkout for booking' })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'booking.success.checkoutStarted',
+  })
+  async startBookingCheckout(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: BookingCheckoutCreateRequestDto
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.startBookingCheckout(user, payload);
+  }
+
+  @Get('/bookings/checkout/:id')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get booking checkout session details' })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkoutDetails',
+  })
+  async getBookingCheckoutSession(
+    @AuthUser() user: IAuthUser,
+    @Param('id') checkoutSessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.getBookingCheckoutSession(
+      user,
+      checkoutSessionId
+    );
+  }
+
+  @Post('/bookings/checkout/:id/refresh')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Refresh booking checkout session from PaySuite' })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkoutRefreshed',
+  })
+  async refreshBookingCheckoutSession(
+    @AuthUser() user: IAuthUser,
+    @Param('id') checkoutSessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.refreshBookingCheckoutSession(
+      user,
+      checkoutSessionId
+    );
+  }
+
+  @Post('/integrations/paysuite/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Handle PaySuite webhook events' })
+  async handlePaysuiteWebhook(
+    @Req() request: any,
+    @Headers('x-webhook-signature') signature?: string
+  ): Promise<{ received: true }> {
+    await this.bookingService.handlePaysuiteWebhook(
+      request.rawBody?.toString?.('utf8') ?? JSON.stringify(request.body ?? {}),
+      request.body,
+      signature
+    );
+
+    return {
+      received: true,
+    };
+  }
+
+  @Get('/integrations/paysuite/return')
+  @ApiOperation({
+    summary: 'Handle PaySuite browser return and redirect to app',
+  })
+  async handlePaysuiteReturn(
+    @Query('sessionId') sessionId: string,
+    @Query('status') status: string | undefined,
+    @Res() response: any
+  ): Promise<void> {
+    const redirectUrl = this.bookingService.buildMobileCheckoutReturnUrl(
+      sessionId,
+      status
+    );
+
+    response.redirect(redirectUrl);
   }
 
   @Post('/bookings/:id/payments/mock/confirm')
@@ -443,7 +535,9 @@ export class BookingPublicController {
 
   @Get('/bookings/:id/overtime-requests/me')
   @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'List overtime requests related to booking for current user' })
+  @ApiOperation({
+    summary: 'List overtime requests related to booking for current user',
+  })
   @DocResponse({
     serialization: OvertimeRequestResponseDto,
     httpStatus: HttpStatus.OK,

@@ -20,6 +20,7 @@ async function bootstrap(): Promise<void> {
     // Create app
     app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
       bufferLogs: true,
+      rawBody: true,
     });
 
     const config = app.get(ConfigService);

@@ -45,7 +45,6 @@ export class TuyaAuthService {
 
     const { data } = await axios.get(`${baseUrl}${this.tokenPath}`, {
       headers,
-      timeout: this.getTimeoutMs(),
     });
 
     if (!data?.success) {
@@ -80,30 +79,22 @@ export class TuyaAuthService {
     const refreshPath = `/v1.0/token/${this.tokenStore.refreshToken}`;
     const headers = getRefreshSignHeaders(clientId, clientSecret, refreshPath);
 
-    try {
-      const { data } = await axios.get(`${baseUrl}${refreshPath}`, {
-        headers,
-        timeout: this.getTimeoutMs(),
-      });
+    const { data } = await axios.get(`${baseUrl}${refreshPath}`, { headers });
 
-      if (!data?.success) {
-        this.reset();
-        return this.getToken();
-      }
-
-      const result = data.result;
-      this.tokenStore = {
-        accessToken: result.access_token,
-        refreshToken: result.refresh_token || this.tokenStore.refreshToken,
-        uid: this.tokenStore.uid,
-        expireTime: Date.now() + (result.expire || 7200) * 1000,
-      };
-
-      return this.tokenStore;
-    } catch {
+    if (!data?.success) {
       this.reset();
       return this.getToken();
     }
+
+    const result = data.result;
+    this.tokenStore = {
+      accessToken: result.access_token,
+      refreshToken: result.refresh_token || this.tokenStore.refreshToken,
+      uid: this.tokenStore.uid,
+      expireTime: Date.now() + (result.expire || 7200) * 1000,
+    };
+
+    return this.tokenStore;
   }
 
   getStoredToken(): ITuyaTokenStore {
@@ -117,13 +108,5 @@ export class TuyaAuthService {
       uid: null,
       expireTime: 0,
     };
-  }
-
-  private getTimeoutMs(): number {
-    const timeout = this.configService.get<number>('tuya.requestTimeoutMs');
-    if (!timeout || Number.isNaN(timeout)) {
-      return 10000;
-    }
-    return timeout;
   }
 }

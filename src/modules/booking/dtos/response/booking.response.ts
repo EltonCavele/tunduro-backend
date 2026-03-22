@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  BookingCheckoutSessionStatus,
   BookingStatus,
   InvitationStatus,
   OpenGameJoinStatus,
@@ -168,6 +169,84 @@ export class BookingResponseDto {
   @Expose()
   @Type(() => BookingPaymentResponseDto)
   payments: BookingPaymentResponseDto[];
+
+  @ApiProperty()
+  @Expose()
+  createdAt: Date;
+
+  @ApiProperty()
+  @Expose()
+  updatedAt: Date;
+}
+
+export class BookingCheckoutSessionResponseDto {
+  @ApiProperty()
+  @Expose()
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  courtId: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  bookingId: string | null;
+
+  @ApiProperty()
+  @Expose()
+  startAt: Date;
+
+  @ApiProperty()
+  @Expose()
+  endAt: Date;
+
+  @ApiProperty()
+  @Expose()
+  durationMinutes: number;
+
+  @ApiProperty()
+  @Expose()
+  amount: number;
+
+  @ApiProperty()
+  @Expose()
+  currency: string;
+
+  @ApiProperty()
+  @Expose()
+  reference: string;
+
+  @ApiProperty({ enum: BookingCheckoutSessionStatus })
+  @Expose()
+  status: BookingCheckoutSessionStatus;
+
+  @ApiProperty()
+  @Expose()
+  expiresAt: Date;
+
+  @ApiPropertyOptional()
+  @Expose()
+  checkoutUrl: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  paymentMethod: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  failureReason: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  paidAt: Date | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  completedAt: Date | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  refundedAt: Date | null;
 
   @ApiProperty()
   @Expose()

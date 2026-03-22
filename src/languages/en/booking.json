@@ -1,6 +1,9 @@
 {
   "success": {
     "created": "Booking created successfully",
+    "checkoutStarted": "Booking checkout started successfully",
+    "checkoutDetails": "Booking checkout details retrieved successfully",
+    "checkoutRefreshed": "Booking checkout refreshed successfully",
     "list": "Bookings retrieved successfully",
     "details": "Booking details retrieved successfully",
     "paymentConfirmed": "Booking payment confirmed successfully",
@@ -21,10 +24,13 @@
   },
   "error": {
     "notFound": "Booking not found",
+    "checkoutSessionNotFound": "Booking checkout session not found",
+    "checkoutFinalizationFailed": "Booking could not be finalized after payment",
     "nothingToConfirm": "No pending bookings found to confirm",
     "slotRangeRequired": "startAt and endAt are required together",
     "invalidTimeRange": "Invalid booking time range",
     "invalidDuration": "Only 60, 120 or 180 minutes are allowed",
+    "dailyDurationLimitExceeded": "You cannot book more than 2 hours in a single day",
     "minimumLeadTime": "Booking must be created at least 30 minutes in advance",
     "exceedsFutureWindow": "Booking cannot be created beyond 60 days",
     "slotAlreadyBooked": "This court slot is already booked",

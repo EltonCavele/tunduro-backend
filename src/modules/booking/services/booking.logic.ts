@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import {
+  BookingCheckoutSessionStatus,
   Booking,
   BookingStatus,
   InvitationStatus,
@@ -24,6 +25,7 @@ import { LightingOrchestratorService } from 'src/modules/lighting/services/light
 
 import {
   BookingCancelRequestDto,
+  BookingCheckoutCreateRequestDto,
   BookingCheckInRequestDto,
   BookingCreateRequestDto,
   BookingInviteRequestDto,
@@ -38,21 +40,32 @@ import {
   WaitlistCreateRequestDto,
 } from '../dtos/request/booking.request';
 import {
+  BookingCheckoutSessionResponseDto,
   BookingCheckInQrResponseDto,
   BookingResponseDto,
   CourtRatingResponseDto,
   OpenGameResponseDto,
   WaitlistResponseDto,
 } from '../dtos/response/booking.response';
+import {
+  PaysuiteClientService,
+  type PaysuiteWebhookPayload,
+} from './paysuite.client.service';
 
 const BLOCKING_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.PENDING,
   BookingStatus.CONFIRMED,
 ];
+const BLOCKING_CHECKOUT_SESSION_STATUSES: BookingCheckoutSessionStatus[] = [
+  BookingCheckoutSessionStatus.OPEN,
+  BookingCheckoutSessionStatus.FINALIZING,
+];
 
 const CLUB_TIMEZONE = 'Africa/Maputo';
+const CLUB_TIMEZONE_OFFSET = '+02:00';
 const MIN_LEAD_MINUTES = 30;
 const MAX_FUTURE_DAYS = 60;
+const MAX_DAILY_BOOKING_MINUTES = 120;
 const PAYMENT_PENDING_MINUTES = 15;
 const WAITLIST_HOLD_MINUTES = 30;
 const CHECKIN_BEFORE_MINUTES = 30;
@@ -64,7 +77,8 @@ export class BookingService {
     private readonly databaseService: DatabaseService,
     private readonly helperNotificationService: HelperNotificationService,
     private readonly courtService: CourtService,
-    private readonly lightingOrchestratorService: LightingOrchestratorService
+    private readonly lightingOrchestratorService: LightingOrchestratorService,
+    private readonly paysuiteClientService: PaysuiteClientService
   ) {}
 
   async createBooking(
@@ -104,6 +118,11 @@ export class BookingService {
 
     for (const slot of slots) {
       this.validateBookingWindow(slot.startAt, slot.endAt);
+      await this.assertOrganizerDailyDurationLimit(
+        user.userId,
+        slot.startAt,
+        slot.endAt
+      );
       await this.assertCourtAvailability(court.id, slot.startAt, slot.endAt);
       await this.assertOrganizerAvailability(
         user.userId,
@@ -267,6 +286,181 @@ export class BookingService {
     }
 
     return bookings;
+  }
+
+  async startBookingCheckout(
+    user: IAuthUser,
+    payload: BookingCheckoutCreateRequestDto
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const court = await this.courtService.assertCourtIsBookable(
+      payload.courtId
+    );
+    const participantUserIds = this.normalizeDistinctIds(
+      payload.participantUserIds ?? []
+    ).filter(userId => userId !== user.userId);
+
+    const totalRequestedParticipants = 1 + participantUserIds.length;
+    if (totalRequestedParticipants > court.maxPlayers) {
+      throw new HttpException(
+        'booking.error.exceedsCourtCapacity',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const slot = this.validateAndBuildSlot(payload.startAt, payload.endAt);
+    this.validateBookingWindow(slot.startAt, slot.endAt);
+    await this.assertOrganizerDailyDurationLimit(
+      user.userId,
+      slot.startAt,
+      slot.endAt
+    );
+    await this.assertCourtAvailability(court.id, slot.startAt, slot.endAt);
+    await this.assertOrganizerAvailability(
+      user.userId,
+      slot.startAt,
+      slot.endAt
+    );
+
+    const amount = this.calculatePrice(
+      court.pricePerHour,
+      slot.durationMinutes
+    );
+    const reference = this.paymentReference('PSC');
+    const now = new Date();
+
+    let session = await this.databaseService.bookingCheckoutSession.create({
+      data: {
+        amount: this.decimal(amount),
+        courtId: court.id,
+        currency: court.currency,
+        durationMinutes: slot.durationMinutes,
+        endAt: slot.endAt,
+        expiresAt: this.addMinutes(now, PAYMENT_PENDING_MINUTES),
+        organizerId: user.userId,
+        participantUserIds,
+        reference,
+        startAt: slot.startAt,
+        status: BookingCheckoutSessionStatus.OPEN,
+      },
+    });
+
+    try {
+      const payment = await this.paysuiteClientService.createPaymentRequest({
+        amount: amount.toFixed(2),
+        callback_url: this.buildPaysuiteWebhookUrl(),
+        description: `Court booking ${court.name} ${slot.startAt.toISOString()}`,
+        reference,
+        return_url: this.buildPaysuiteReturnEndpointUrl(session.id),
+      });
+
+      session = await this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          checkoutUrl: payment.checkout_url ?? null,
+          metadata: {
+            paysuiteStatus: payment.status,
+          },
+          paysuitePaymentId: payment.id,
+        },
+      });
+    } catch (error: any) {
+      await this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          failureReason: this.extractErrorMessage(error),
+          status: BookingCheckoutSessionStatus.PAYMENT_FAILED,
+        },
+      });
+      throw error;
+    }
+
+    return this.serializeCheckoutSession(session);
+  }
+
+  async getBookingCheckoutSession(
+    user: IAuthUser,
+    checkoutSessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const session = await this.getAccessibleCheckoutSession(
+      user,
+      checkoutSessionId
+    );
+    return this.serializeCheckoutSession(session);
+  }
+
+  async refreshBookingCheckoutSession(
+    user: IAuthUser,
+    checkoutSessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const session = await this.getAccessibleCheckoutSession(
+      user,
+      checkoutSessionId
+    );
+    const synced = await this.reconcileCheckoutSession(session, true);
+    return this.serializeCheckoutSession(synced);
+  }
+
+  async handlePaysuiteWebhook(
+    rawBody: string,
+    payload: PaysuiteWebhookPayload,
+    signature?: string
+  ): Promise<void> {
+    const isValid = this.paysuiteClientService.verifyWebhookSignature(
+      rawBody,
+      signature
+    );
+
+    if (!isValid) {
+      throw new HttpException(
+        'payment.error.invalidWebhookSignature',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const paymentId = payload?.data?.id;
+    if (!paymentId) {
+      throw new HttpException(
+        'payment.error.invalidWebhookPayload',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const session = await this.databaseService.bookingCheckoutSession.findFirst(
+      {
+        where: {
+          paysuitePaymentId: paymentId,
+        },
+      }
+    );
+
+    if (!session) {
+      return;
+    }
+
+    if (payload.event === 'payment.success') {
+      await this.reconcileCheckoutSession(session, true);
+      return;
+    }
+
+    if (payload.event === 'payment.failed') {
+      await this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          failureReason: payload.data.error ?? 'payment_failed',
+          status: BookingCheckoutSessionStatus.PAYMENT_FAILED,
+        },
+      });
+    }
+  }
+
+  buildMobileCheckoutReturnUrl(sessionId: string, status?: string): string {
+    const scheme = this.paysuiteClientService.getMobileDeepLinkScheme();
+    const query = new URLSearchParams({
+      sessionId,
+      ...(status ? { status } : {}),
+    });
+
+    return `${scheme}://payments/booking-return?${query.toString()}`;
   }
 
   async confirmBookingPayment(
@@ -455,6 +649,7 @@ export class BookingService {
       where: { id: bookingId },
       include: {
         organizer: true,
+        payments: true,
         participants: true,
         court: true,
       },
@@ -492,6 +687,40 @@ export class BookingService {
     const paidAmount = Number(booking.paidAmount);
     const refundAmount = Number((paidAmount * refundRate).toFixed(2));
     const penaltyAmount = Number((paidAmount - refundAmount).toFixed(2));
+    const originalBookingPayment = booking.payments.find(
+      payment =>
+        payment.type === PaymentType.BOOKING &&
+        payment.status !== PaymentStatus.CANCELLED
+    );
+
+    let paysuiteRefund:
+      | {
+          id: string;
+          status: string;
+        }
+      | undefined;
+
+    if (refundAmount > 0) {
+      const paysuitePaymentId = this.getPaysuitePaymentIdFromMetadata(
+        originalBookingPayment?.metadata
+      );
+
+      if (!paysuitePaymentId) {
+        throw new HttpException(
+          'payment.error.missingProviderPaymentId',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      paysuiteRefund = await this.paysuiteClientService.createRefund({
+        amount: refundAmount.toFixed(2),
+        payment_id: paysuitePaymentId,
+        reason: this.truncateString(
+          payload.reason?.trim() || 'cancelled_by_user',
+          500
+        ),
+      });
+    }
 
     await this.databaseService.$transaction(async tx => {
       await tx.booking.update({
@@ -519,16 +748,41 @@ export class BookingService {
             bookingId: booking.id,
             userId: booking.organizerId,
             type: PaymentType.CANCELLATION_REFUND,
-            status: PaymentStatus.COMPLETED,
+            status:
+              paysuiteRefund?.status === 'completed'
+                ? PaymentStatus.COMPLETED
+                : PaymentStatus.PENDING,
             amount: this.decimal(refundAmount),
             currency: booking.currency,
             reference: this.paymentReference('RF'),
-            processedAt: now,
+            processedAt: paysuiteRefund?.status === 'completed' ? now : null,
             metadata: {
               policy: '>=24h=100%;2-24h=50%;<2h=0%',
+              provider: 'paysuite',
+              refundId: paysuiteRefund?.id ?? null,
+              refundStatus: paysuiteRefund?.status ?? null,
             },
           },
         });
+
+        if (originalBookingPayment) {
+          await tx.paymentTransaction.update({
+            where: {
+              id: originalBookingPayment.id,
+            },
+            data: {
+              metadata: this.mergeJson(originalBookingPayment.metadata, {
+                latestRefundId: paysuiteRefund?.id ?? null,
+                latestRefundStatus: paysuiteRefund?.status ?? null,
+              }),
+              status:
+                paysuiteRefund?.status === 'completed' &&
+                refundAmount >= paidAmount
+                  ? PaymentStatus.REFUNDED
+                  : originalBookingPayment.status,
+            },
+          });
+        }
       }
 
       if (penaltyAmount > 0) {
@@ -640,6 +894,12 @@ export class BookingService {
 
     await this.assertCourtAvailability(
       nextCourt.id,
+      slot.startAt,
+      slot.endAt,
+      booking.id
+    );
+    await this.assertOrganizerDailyDurationLimit(
+      booking.organizerId,
       slot.startAt,
       slot.endAt,
       booking.id
@@ -2035,6 +2295,132 @@ export class BookingService {
     return pending.length;
   }
 
+  async processCheckoutSessionExpirations(): Promise<number> {
+    const now = new Date();
+    const result = await this.databaseService.bookingCheckoutSession.updateMany(
+      {
+        where: {
+          expiresAt: {
+            lt: now,
+          },
+          status: BookingCheckoutSessionStatus.OPEN,
+        },
+        data: {
+          failureReason: 'checkout_expired',
+          status: BookingCheckoutSessionStatus.EXPIRED,
+        },
+      }
+    );
+
+    return result.count;
+  }
+
+  async reconcilePendingCheckoutSessions(): Promise<number> {
+    const sessions = await this.databaseService.bookingCheckoutSession.findMany(
+      {
+        where: {
+          OR: [
+            {
+              status: BookingCheckoutSessionStatus.OPEN,
+              expiresAt: {
+                gt: new Date(),
+              },
+            },
+            {
+              status: BookingCheckoutSessionStatus.REFUND_PENDING,
+            },
+          ],
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        take: 20,
+      }
+    );
+
+    let processed = 0;
+
+    for (const session of sessions) {
+      await this.reconcileCheckoutSession(session, true);
+      processed += 1;
+    }
+
+    return processed;
+  }
+
+  async reconcilePendingRefundTransactions(): Promise<number> {
+    const pendingRefunds =
+      await this.databaseService.paymentTransaction.findMany({
+        where: {
+          status: PaymentStatus.PENDING,
+          type: PaymentType.CANCELLATION_REFUND,
+        },
+        take: 20,
+      });
+
+    let processed = 0;
+
+    for (const payment of pendingRefunds) {
+      const refundId = this.getRefundIdFromPaymentMetadata(payment.metadata);
+      if (!refundId) {
+        continue;
+      }
+
+      const refund = await this.paysuiteClientService.getRefund(refundId);
+
+      if (refund.status === 'completed') {
+        await this.databaseService.$transaction(async tx => {
+          await tx.paymentTransaction.update({
+            where: { id: payment.id },
+            data: {
+              processedAt: new Date(),
+              status: PaymentStatus.COMPLETED,
+            },
+          });
+
+          const bookingPayment = await tx.paymentTransaction.findFirst({
+            where: {
+              bookingId: payment.bookingId,
+              type: PaymentType.BOOKING,
+            },
+            orderBy: {
+              createdAt: 'asc',
+            },
+          });
+
+          if (bookingPayment) {
+            const refundAmount = Number(payment.amount);
+            const paidAmount = Number(bookingPayment.amount);
+
+            await tx.paymentTransaction.update({
+              where: { id: bookingPayment.id },
+              data: {
+                status:
+                  refundAmount >= paidAmount
+                    ? PaymentStatus.REFUNDED
+                    : bookingPayment.status,
+              },
+            });
+          }
+        });
+      }
+
+      if (refund.status === 'failed' || refund.status === 'cancelled') {
+        await this.databaseService.paymentTransaction.update({
+          where: { id: payment.id },
+          data: {
+            processedAt: new Date(),
+            status: PaymentStatus.FAILED,
+          },
+        });
+      }
+
+      processed += 1;
+    }
+
+    return processed;
+  }
+
   async processNoShows(): Promise<number> {
     const now = new Date();
     const threshold = this.addMinutes(now, -CHECKIN_AFTER_MINUTES);
@@ -2337,6 +2723,32 @@ export class BookingService {
     };
   }
 
+  private serializeCheckoutSession(
+    session: any
+  ): BookingCheckoutSessionResponseDto {
+    return {
+      id: session.id,
+      courtId: session.courtId,
+      bookingId: session.bookingId ?? null,
+      startAt: session.startAt,
+      endAt: session.endAt,
+      durationMinutes: session.durationMinutes,
+      amount: Number(session.amount),
+      currency: session.currency,
+      reference: session.reference,
+      status: session.status,
+      expiresAt: session.expiresAt,
+      checkoutUrl: session.checkoutUrl ?? null,
+      paymentMethod: session.paymentMethod ?? null,
+      failureReason: session.failureReason ?? null,
+      paidAt: session.paidAt ?? null,
+      completedAt: session.completedAt ?? null,
+      refundedAt: session.refundedAt ?? null,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    };
+  }
+
   private serializeWaitlist(entry: any): WaitlistResponseDto {
     return {
       id: entry.id,
@@ -2385,6 +2797,524 @@ export class BookingService {
       createdAt: rating.createdAt,
       updatedAt: rating.updatedAt,
     };
+  }
+
+  private async getAccessibleCheckoutSession(
+    user: IAuthUser,
+    checkoutSessionId: string
+  ): Promise<any> {
+    const session =
+      await this.databaseService.bookingCheckoutSession.findUnique({
+        where: {
+          id: checkoutSessionId,
+        },
+      });
+
+    if (!session) {
+      throw new HttpException(
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (session.organizerId !== user.userId && user.role !== Role.ADMIN) {
+      throw new HttpException(
+        'auth.error.insufficientPermissions',
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    return session;
+  }
+
+  private async reconcileCheckoutSession(
+    session: any,
+    forceSync: boolean
+  ): Promise<any> {
+    const latest = await this.databaseService.bookingCheckoutSession.findUnique(
+      {
+        where: {
+          id: session.id,
+        },
+      }
+    );
+
+    if (!latest) {
+      throw new HttpException(
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (
+      latest.status === BookingCheckoutSessionStatus.COMPLETED ||
+      latest.status === BookingCheckoutSessionStatus.PAYMENT_FAILED ||
+      latest.status === BookingCheckoutSessionStatus.REFUNDED ||
+      latest.status === BookingCheckoutSessionStatus.EXPIRED
+    ) {
+      return latest;
+    }
+
+    if (
+      latest.status === BookingCheckoutSessionStatus.OPEN &&
+      latest.expiresAt <= new Date()
+    ) {
+      return this.databaseService.bookingCheckoutSession.update({
+        where: { id: latest.id },
+        data: {
+          failureReason: latest.failureReason ?? 'checkout_expired',
+          status: BookingCheckoutSessionStatus.EXPIRED,
+        },
+      });
+    }
+
+    if (
+      latest.status === BookingCheckoutSessionStatus.REFUND_PENDING &&
+      latest.refundId
+    ) {
+      return this.syncCheckoutSessionRefund(latest);
+    }
+
+    if (!forceSync || !latest.paysuitePaymentId) {
+      return latest;
+    }
+
+    const payment = await this.paysuiteClientService.getPaymentRequest(
+      latest.paysuitePaymentId
+    );
+
+    await this.databaseService.bookingCheckoutSession.update({
+      where: { id: latest.id },
+      data: {
+        metadata: this.mergeJson(latest.metadata, {
+          paysuiteStatus: payment.status,
+          paysuiteTransactionId: payment.transaction?.transaction_id ?? null,
+        }),
+      },
+    });
+
+    if (payment.status === 'paid') {
+      return this.finalizePaidCheckoutSession(latest.id, payment);
+    }
+
+    if (payment.status === 'failed' || payment.status === 'cancelled') {
+      return this.databaseService.bookingCheckoutSession.update({
+        where: { id: latest.id },
+        data: {
+          failureReason: latest.failureReason ?? 'payment_failed',
+          status: BookingCheckoutSessionStatus.PAYMENT_FAILED,
+        },
+      });
+    }
+
+    return this.databaseService.bookingCheckoutSession.findUnique({
+      where: {
+        id: latest.id,
+      },
+    });
+  }
+
+  private async finalizePaidCheckoutSession(
+    checkoutSessionId: string,
+    payment: {
+      id: string;
+      status: string;
+      transaction?: {
+        method?: string | null;
+        paid_at?: string | null;
+        status?: string | null;
+        transaction_id?: string | null;
+      } | null;
+    }
+  ): Promise<any> {
+    const session =
+      await this.databaseService.bookingCheckoutSession.findUnique({
+        where: { id: checkoutSessionId },
+      });
+
+    if (!session) {
+      throw new HttpException(
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (
+      session.bookingId ||
+      session.status === BookingCheckoutSessionStatus.COMPLETED
+    ) {
+      return session;
+    }
+
+    const claimed =
+      await this.databaseService.bookingCheckoutSession.updateMany({
+        where: {
+          id: checkoutSessionId,
+          status: {
+            in: [
+              BookingCheckoutSessionStatus.OPEN,
+              BookingCheckoutSessionStatus.FINALIZING,
+            ],
+          },
+        },
+        data: {
+          failureReason: null,
+          metadata: this.mergeJson(session.metadata, {
+            paysuiteStatus: payment.status,
+            paysuiteTransactionId: payment.transaction?.transaction_id ?? null,
+          }),
+          paidAt: payment.transaction?.paid_at
+            ? new Date(payment.transaction.paid_at)
+            : new Date(),
+          paymentMethod: payment.transaction?.method ?? null,
+          status: BookingCheckoutSessionStatus.FINALIZING,
+        },
+      });
+
+    if (!claimed.count) {
+      return this.databaseService.bookingCheckoutSession.findUnique({
+        where: { id: checkoutSessionId },
+      });
+    }
+
+    const latest = await this.databaseService.bookingCheckoutSession.findUnique(
+      {
+        where: { id: checkoutSessionId },
+      }
+    );
+
+    if (!latest) {
+      throw new HttpException(
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    const participantUserIds = this.getSessionParticipantUserIds(latest);
+
+    try {
+      const court = await this.courtService.assertCourtIsBookable(
+        latest.courtId
+      );
+
+      await this.assertOrganizerDailyDurationLimit(
+        latest.organizerId,
+        latest.startAt,
+        latest.endAt,
+        undefined,
+        latest.id
+      );
+      await this.assertCourtAvailability(
+        court.id,
+        latest.startAt,
+        latest.endAt,
+        undefined,
+        latest.id
+      );
+      await this.assertOrganizerAvailability(
+        latest.organizerId,
+        latest.startAt,
+        latest.endAt,
+        undefined,
+        latest.id
+      );
+
+      await this.databaseService.$transaction(async tx => {
+        const createdBooking = await tx.booking.create({
+          data: {
+            checkInToken: randomUUID(),
+            checkInTokenExpiresAt: this.addMinutes(
+              latest.startAt,
+              CHECKIN_AFTER_MINUTES
+            ),
+            courtId: latest.courtId,
+            currency: latest.currency,
+            durationMinutes: latest.durationMinutes,
+            endAt: latest.endAt,
+            organizerId: latest.organizerId,
+            paidAmount: latest.amount,
+            startAt: latest.startAt,
+            status: BookingStatus.CONFIRMED,
+            totalPrice: latest.amount,
+          },
+        });
+
+        await tx.bookingParticipant.create({
+          data: {
+            bookingId: createdBooking.id,
+            isOrganizer: true,
+            status: ParticipantStatus.ACCEPTED,
+            userId: latest.organizerId,
+          },
+        });
+
+        for (const participantUserId of participantUserIds) {
+          await tx.bookingParticipant.create({
+            data: {
+              bookingId: createdBooking.id,
+              isOrganizer: false,
+              status: ParticipantStatus.INVITED,
+              userId: participantUserId,
+            },
+          });
+
+          await tx.bookingInvitation.create({
+            data: {
+              bookingId: createdBooking.id,
+              expiresAt: this.addHours(new Date(), 24),
+              invitedUserId: participantUserId,
+              inviterUserId: latest.organizerId,
+              status: InvitationStatus.PENDING,
+              token: randomUUID(),
+            },
+          });
+        }
+
+        await tx.bookingStatusHistory.create({
+          data: {
+            bookingId: createdBooking.id,
+            changedByUserId: latest.organizerId,
+            fromStatus: null,
+            reason: 'payment_confirmed',
+            toStatus: BookingStatus.CONFIRMED,
+          },
+        });
+
+        await tx.paymentTransaction.create({
+          data: {
+            amount: latest.amount,
+            bookingId: createdBooking.id,
+            currency: latest.currency,
+            metadata: {
+              paysuitePaymentId: latest.paysuitePaymentId,
+              paysuiteStatus: payment.status,
+              paysuiteTransactionId:
+                payment.transaction?.transaction_id ?? null,
+              provider: 'paysuite',
+            },
+            processedAt: latest.paidAt ?? new Date(),
+            reference: latest.reference,
+            status: PaymentStatus.COMPLETED,
+            type: PaymentType.BOOKING,
+            userId: latest.organizerId,
+          },
+        });
+
+        await tx.bookingCheckoutSession.update({
+          where: { id: latest.id },
+          data: {
+            bookingId: createdBooking.id,
+            completedAt: new Date(),
+            status: BookingCheckoutSessionStatus.COMPLETED,
+          },
+        });
+      });
+
+      const usersById = await this.fetchUsersByIds(participantUserIds);
+      for (const invitedUser of usersById.values()) {
+        await this.notifyUser(
+          invitedUser,
+          'New booking invitation',
+          'You were invited to join a court booking.'
+        );
+      }
+
+      return this.databaseService.bookingCheckoutSession.findUnique({
+        where: {
+          id: latest.id,
+        },
+      });
+    } catch (error) {
+      await this.initiateRefundForCheckoutSession(latest, error);
+      return this.databaseService.bookingCheckoutSession.findUnique({
+        where: { id: latest.id },
+      });
+    }
+  }
+
+  private async initiateRefundForCheckoutSession(
+    session: any,
+    error: unknown
+  ): Promise<any> {
+    if (!session.paysuitePaymentId) {
+      return this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          failureReason: this.extractErrorMessage(error),
+          status: BookingCheckoutSessionStatus.REFUND_PENDING,
+        },
+      });
+    }
+
+    if (session.refundId) {
+      return this.syncCheckoutSessionRefund(session);
+    }
+
+    try {
+      const refund = await this.paysuiteClientService.createRefund({
+        amount: Number(session.amount).toFixed(2),
+        payment_id: session.paysuitePaymentId,
+        reason: this.truncateString(this.extractErrorMessage(error), 500),
+      });
+
+      return this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          failureReason: this.extractErrorMessage(error),
+          refundId: refund.id,
+          refundedAt: refund.status === 'completed' ? new Date() : null,
+          status:
+            refund.status === 'completed'
+              ? BookingCheckoutSessionStatus.REFUNDED
+              : BookingCheckoutSessionStatus.REFUND_PENDING,
+        },
+      });
+    } catch (refundError) {
+      return this.databaseService.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          failureReason: this.extractErrorMessage(refundError),
+          status: BookingCheckoutSessionStatus.REFUND_PENDING,
+        },
+      });
+    }
+  }
+
+  private async syncCheckoutSessionRefund(session: any): Promise<any> {
+    if (!session.refundId) {
+      return session;
+    }
+
+    const refund = await this.paysuiteClientService.getRefund(session.refundId);
+
+    return this.databaseService.bookingCheckoutSession.update({
+      where: { id: session.id },
+      data: {
+        refundedAt: refund.status === 'completed' ? new Date() : null,
+        status:
+          refund.status === 'completed'
+            ? BookingCheckoutSessionStatus.REFUNDED
+            : BookingCheckoutSessionStatus.REFUND_PENDING,
+      },
+    });
+  }
+
+  private buildPaysuiteWebhookUrl(): string {
+    const appPublicUrl = this.paysuiteClientService
+      .getAppPublicUrl()
+      .replace(/\/$/, '');
+
+    if (!appPublicUrl) {
+      throw new HttpException(
+        'payment.error.paysuiteReturnUrlNotConfigured',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+    return `${appPublicUrl}/v1/integrations/paysuite/webhook`;
+  }
+
+  private buildPaysuiteReturnEndpointUrl(sessionId: string): string {
+    const appPublicUrl = this.paysuiteClientService
+      .getAppPublicUrl()
+      .replace(/\/$/, '');
+
+    if (!appPublicUrl) {
+      throw new HttpException(
+        'payment.error.paysuiteReturnUrlNotConfigured',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+    return `${appPublicUrl}/v1/integrations/paysuite/return?sessionId=${encodeURIComponent(
+      sessionId
+    )}`;
+  }
+
+  private getSessionParticipantUserIds(session: any): string[] {
+    if (!Array.isArray(session.participantUserIds)) {
+      return [];
+    }
+
+    return session.participantUserIds
+      .map((value: unknown) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean);
+  }
+
+  private mergeJson(
+    currentValue: unknown,
+    nextValue: Record<string, unknown>
+  ): Prisma.InputJsonValue {
+    const base =
+      currentValue &&
+      typeof currentValue === 'object' &&
+      !Array.isArray(currentValue)
+        ? (currentValue as Record<string, unknown>)
+        : {};
+
+    return {
+      ...base,
+      ...nextValue,
+    } as Prisma.InputJsonValue;
+  }
+
+  private getPaysuitePaymentIdFromMetadata(
+    metadata: Prisma.JsonValue | null | undefined
+  ): string | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return null;
+    }
+
+    const value = (metadata as Record<string, unknown>).paysuitePaymentId;
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private getRefundIdFromPaymentMetadata(
+    metadata: Prisma.JsonValue | null | undefined
+  ): string | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return null;
+    }
+
+    const value = (metadata as Record<string, unknown>).refundId;
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private extractErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') {
+        return response;
+      }
+
+      if (
+        response &&
+        typeof response === 'object' &&
+        'message' in response &&
+        typeof (response as Record<string, unknown>).message === 'string'
+      ) {
+        return (response as Record<string, string>).message;
+      }
+    }
+
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as Record<string, unknown>).message === 'string'
+    ) {
+      return (error as Record<string, string>).message;
+    }
+
+    return 'booking.error.checkoutFinalizationFailed';
+  }
+
+  private truncateString(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+
+    return value.slice(0, maxLength);
   }
 
   private validateAndBuildSlot(
@@ -2470,7 +3400,8 @@ export class BookingService {
     courtId: string,
     startAt: Date,
     endAt: Date,
-    excludeBookingId?: string
+    excludeBookingId?: string,
+    excludeCheckoutSessionId?: string
   ): Promise<void> {
     const conflict = await this.databaseService.booking.findFirst({
       where: {
@@ -2489,13 +3420,123 @@ export class BookingService {
         HttpStatus.CONFLICT
       );
     }
+
+    const checkoutConflict =
+      await this.databaseService.bookingCheckoutSession.findFirst({
+        where: {
+          courtId,
+          status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
+          expiresAt: {
+            gt: new Date(),
+          },
+          startAt: { lt: endAt },
+          endAt: { gt: startAt },
+          ...(excludeCheckoutSessionId
+            ? { id: { not: excludeCheckoutSessionId } }
+            : {}),
+        },
+        select: { id: true },
+      });
+
+    if (checkoutConflict) {
+      throw new HttpException(
+        'booking.error.slotAlreadyBooked',
+        HttpStatus.CONFLICT
+      );
+    }
+  }
+
+  private async assertOrganizerDailyDurationLimit(
+    organizerId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeBookingId?: string,
+    excludeCheckoutSessionId?: string
+  ): Promise<void> {
+    const clubDayRange = this.getClubDayRange(startAt);
+    const existingBookings = await this.databaseService.booking.findMany({
+      where: {
+        organizerId,
+        status: { in: BLOCKING_BOOKING_STATUSES },
+        startAt: { lt: clubDayRange.endAt },
+        endAt: { gt: clubDayRange.startAt },
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+      select: {
+        startAt: true,
+        endAt: true,
+      },
+    });
+
+    const existingCheckoutSessions =
+      await this.databaseService.bookingCheckoutSession.findMany({
+        where: {
+          organizerId,
+          status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
+          expiresAt: {
+            gt: new Date(),
+          },
+          startAt: { lt: clubDayRange.endAt },
+          endAt: { gt: clubDayRange.startAt },
+          ...(excludeCheckoutSessionId
+            ? { id: { not: excludeCheckoutSessionId } }
+            : {}),
+        },
+        select: {
+          endAt: true,
+          startAt: true,
+        },
+      });
+
+    const bookedMinutes = [
+      ...existingBookings,
+      ...existingCheckoutSessions,
+    ].reduce((total, booking) => {
+      const overlapStart = Math.max(
+        booking.startAt.getTime(),
+        clubDayRange.startAt.getTime()
+      );
+      const overlapEnd = Math.min(
+        booking.endAt.getTime(),
+        clubDayRange.endAt.getTime()
+      );
+
+      if (overlapEnd <= overlapStart) {
+        return total;
+      }
+
+      return total + Math.round((overlapEnd - overlapStart) / (1000 * 60));
+    }, 0);
+
+    const requestedOverlapStart = Math.max(
+      startAt.getTime(),
+      clubDayRange.startAt.getTime()
+    );
+    const requestedOverlapEnd = Math.min(
+      endAt.getTime(),
+      clubDayRange.endAt.getTime()
+    );
+    const requestedMinutes =
+      requestedOverlapEnd <= requestedOverlapStart
+        ? 0
+        : Math.round(
+            (requestedOverlapEnd - requestedOverlapStart) / (1000 * 60)
+          );
+
+    if (bookedMinutes + requestedMinutes > MAX_DAILY_BOOKING_MINUTES) {
+      throw new HttpException(
+        'booking.error.dailyDurationLimitExceeded',
+        HttpStatus.BAD_REQUEST
+      );
+    }
   }
 
   private async assertOrganizerAvailability(
     organizerId: string,
     startAt: Date,
     endAt: Date,
-    excludeBookingId?: string
+    excludeBookingId?: string,
+    excludeCheckoutSessionId?: string
   ): Promise<void> {
     const conflict = await this.databaseService.booking.findFirst({
       where: {
@@ -2509,6 +3550,30 @@ export class BookingService {
     });
 
     if (conflict) {
+      throw new HttpException(
+        'booking.error.organizerOverlap',
+        HttpStatus.CONFLICT
+      );
+    }
+
+    const checkoutConflict =
+      await this.databaseService.bookingCheckoutSession.findFirst({
+        where: {
+          organizerId,
+          status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
+          expiresAt: {
+            gt: new Date(),
+          },
+          startAt: { lt: endAt },
+          endAt: { gt: startAt },
+          ...(excludeCheckoutSessionId
+            ? { id: { not: excludeCheckoutSessionId } }
+            : {}),
+        },
+        select: { id: true },
+      });
+
+    if (checkoutConflict) {
       throw new HttpException(
         'booking.error.organizerOverlap',
         HttpStatus.CONFLICT
@@ -2567,7 +3632,27 @@ export class BookingService {
       },
     });
 
-    return !conflict;
+    if (conflict) {
+      return false;
+    }
+
+    const checkoutConflict =
+      await this.databaseService.bookingCheckoutSession.findFirst({
+        where: {
+          courtId,
+          status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
+          expiresAt: {
+            gt: new Date(),
+          },
+          startAt: { lt: endAt },
+          endAt: { gt: startAt },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    return !checkoutConflict;
   }
 
   private parseBookingStatus(value?: string): BookingStatus | undefined {
@@ -2674,6 +3759,35 @@ export class BookingService {
 
   private addDays(date: Date, days: number): Date {
     return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private getClubDayRange(date: Date): { startAt: Date; endAt: Date } {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: CLUB_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parts.find(part => part.type === 'year')?.value;
+    const month = parts.find(part => part.type === 'month')?.value;
+    const day = parts.find(part => part.type === 'day')?.value;
+
+    if (!year || !month || !day) {
+      return {
+        startAt: date,
+        endAt: this.addDays(date, 1),
+      };
+    }
+
+    const startAt = new Date(
+      `${year}-${month}-${day}T00:00:00${CLUB_TIMEZONE_OFFSET}`
+    );
+
+    return {
+      startAt,
+      endAt: this.addDays(startAt, 1),
+    };
   }
 
   private paymentReference(prefix: string): string {

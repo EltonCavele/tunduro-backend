@@ -1,4 +1,12 @@
 {
+  "error": {
+    "invalidWebhookPayload": "Invalid PaySuite webhook payload",
+    "invalidWebhookSignature": "Invalid PaySuite webhook signature",
+    "missingProviderPaymentId": "Missing provider payment identifier for this booking",
+    "paysuiteNotConfigured": "PaySuite is not configured",
+    "paysuiteReturnUrlNotConfigured": "PaySuite return URL configuration is missing",
+    "providerUnavailable": "Payment provider is currently unavailable"
+  },
   "mpesa": {
     "error": {
       "default": "Payment provider returned an error"

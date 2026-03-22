@@ -66,7 +66,12 @@ export class LightingOrchestratorService {
 
     for (const booking of candidates) {
       const court = booking.court;
-      if (!court || court.deletedAt || !court.hasLighting || !court.lightingEnabled) {
+      if (
+        !court ||
+        court.deletedAt ||
+        !court.hasLighting ||
+        !court.lightingEnabled
+      ) {
         continue;
       }
 
@@ -227,7 +232,10 @@ export class LightingOrchestratorService {
     }
 
     const now = new Date();
-    const offCutoff = this.addMinutes(booking.endAt, court.lightingOffBufferMin || 5);
+    const offCutoff = this.addMinutes(
+      booking.endAt,
+      court.lightingOffBufferMin || 5
+    );
     if (now < booking.startAt || now > offCutoff) {
       return;
     }
@@ -267,14 +275,23 @@ export class LightingOrchestratorService {
     }
 
     const now = new Date();
-    const onAt = this.addMinutes(booking.startAt, court.lightingOnOffsetMin || 0);
-    const offAt = this.addMinutes(booking.endAt, court.lightingOffBufferMin || 5);
+    const onAt = this.addMinutes(
+      booking.startAt,
+      court.lightingOnOffsetMin || 0
+    );
+    const offAt = this.addMinutes(
+      booking.endAt,
+      court.lightingOffBufferMin || 5
+    );
 
     if (now < onAt || now >= offAt) {
       return;
     }
 
-    const hasOn = await this.hasSuccessfulAction(booking.id, LightingActionType.AUTO_ON);
+    const hasOn = await this.hasSuccessfulAction(
+      booking.id,
+      LightingActionType.AUTO_ON
+    );
 
     if (!hasOn) {
       await this.dispatchSwitch({
@@ -338,7 +355,9 @@ export class LightingOrchestratorService {
       on: action === 'ON',
       source: LightingActionSource.ADMIN,
       action:
-        action === 'ON' ? LightingActionType.MANUAL_ON : LightingActionType.MANUAL_OFF,
+        action === 'ON'
+          ? LightingActionType.MANUAL_ON
+          : LightingActionType.MANUAL_OFF,
       reason: reason.trim(),
       requestedByUserId: adminUserId,
     });
@@ -628,8 +647,11 @@ export class LightingOrchestratorService {
     const baseDelayMs = this.getRetryDelayMs();
 
     let lastError = 'lighting.error.tuyaApi';
+    let attemptsMade = 0;
 
     for (let attempt = 1; attempt <= retryCount; attempt += 1) {
+      attemptsMade = attempt;
+
       try {
         const details = await this.tuyaClientService.sendSwitch(
           params.deviceId,
@@ -683,6 +705,10 @@ export class LightingOrchestratorService {
           `Switch dispatch failed for court=${params.courtId} attempt=${attempt}/${retryCount}: ${lastError}`
         );
 
+        if (!this.shouldRetrySwitchError(lastError)) {
+          break;
+        }
+
         if (attempt < retryCount) {
           await this.sleep(baseDelayMs * 2 ** (attempt - 1));
         }
@@ -718,8 +744,11 @@ export class LightingOrchestratorService {
       source: params.source,
       action: params.action,
       success: false,
-      attempts: retryCount,
-      errorCode: 'dispatch_failed_after_retries',
+      attempts: attemptsMade,
+      errorCode:
+        attemptsMade >= retryCount
+          ? 'dispatch_failed_after_retries'
+          : 'dispatch_failed',
       errorMessage: lastError,
       reason: params.reason,
       requestedByUserId: params.requestedByUserId,
@@ -797,7 +826,8 @@ export class LightingOrchestratorService {
         );
       }
     } catch (error: any) {
-      const message = error?.message || 'lighting.error.deviceStatusUnavailable';
+      const message =
+        error?.message || 'lighting.error.deviceStatusUnavailable';
 
       await this.databaseService.lightingDeviceState.upsert({
         where: {
@@ -859,7 +889,10 @@ export class LightingOrchestratorService {
       },
     });
 
-    if (existing && Date.now() - existing.createdAt.getTime() < 30 * 60 * 1000) {
+    if (
+      existing &&
+      Date.now() - existing.createdAt.getTime() < 30 * 60 * 1000
+    ) {
       return;
     }
 
@@ -987,6 +1020,11 @@ export class LightingOrchestratorService {
     }
 
     return Math.max(200, value);
+  }
+
+  private shouldRetrySwitchError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return !normalized.includes('permission deny');
   }
 
   private sleep(ms: number): Promise<void> {

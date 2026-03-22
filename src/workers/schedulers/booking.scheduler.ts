@@ -19,23 +19,31 @@ export class BookingScheduler {
   async handleLifecycleTasks() {
     const [
       expiredPayments,
+      expiredCheckoutSessions,
+      reconciledCheckoutSessions,
+      reconciledRefunds,
       noShows,
       completed,
       expiredOffers,
       expiredOvertimePayments,
       lightingProcessed,
-    ] =
-      await Promise.all([
-        this.bookingService.processPendingPaymentExpirations(),
-        this.bookingService.processNoShows(),
-        this.bookingService.processCompletions(),
-        this.bookingService.processWaitlistOfferExpirations(),
-        this.bookingOvertimeService.processPaymentExpirations(),
-        this.lightingOrchestratorService.processAutomaticLighting(),
-      ]);
+    ] = await Promise.all([
+      this.bookingService.processPendingPaymentExpirations(),
+      this.bookingService.processCheckoutSessionExpirations(),
+      this.bookingService.reconcilePendingCheckoutSessions(),
+      this.bookingService.reconcilePendingRefundTransactions(),
+      this.bookingService.processNoShows(),
+      this.bookingService.processCompletions(),
+      this.bookingService.processWaitlistOfferExpirations(),
+      this.bookingOvertimeService.processPaymentExpirations(),
+      this.lightingOrchestratorService.processAutomaticLighting(),
+    ]);
 
     if (
       expiredPayments ||
+      expiredCheckoutSessions ||
+      reconciledCheckoutSessions ||
+      reconciledRefunds ||
       noShows ||
       completed ||
       expiredOffers ||
@@ -43,7 +51,7 @@ export class BookingScheduler {
       lightingProcessed
     ) {
       this.logger.log(
-        `Lifecycle updates -> expiredPayments=${expiredPayments}, noShows=${noShows}, completed=${completed}, expiredOffers=${expiredOffers}, expiredOvertimePayments=${expiredOvertimePayments}, lightingProcessed=${lightingProcessed}`
+        `Lifecycle updates -> expiredPayments=${expiredPayments}, expiredCheckoutSessions=${expiredCheckoutSessions}, reconciledCheckoutSessions=${reconciledCheckoutSessions}, reconciledRefunds=${reconciledRefunds}, noShows=${noShows}, completed=${completed}, expiredOffers=${expiredOffers}, expiredOvertimePayments=${expiredOvertimePayments}, lightingProcessed=${lightingProcessed}`
       );
     }
   }
@@ -58,7 +66,8 @@ export class BookingScheduler {
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleLightingAuditRetention() {
-    const deleted = await this.lightingOrchestratorService.purgeOldAuditLogs(180);
+    const deleted =
+      await this.lightingOrchestratorService.purgeOldAuditLogs(180);
     if (deleted > 0) {
       this.logger.log(`Lighting audit cleanup deleted records: ${deleted}`);
     }

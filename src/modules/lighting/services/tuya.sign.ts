@@ -10,7 +10,7 @@ function encrypt(value: string, secret: string): string {
     .toUpperCase();
 }
 
-function normalizePath(path: string): string {
+function buildSignedPath(path: string): string {
   const [uri, rawQuery] = path.split('?');
 
   if (!rawQuery) {
@@ -40,8 +40,8 @@ export function getTokenSignHeaders(
   const path = '/v1.0/token?grant_type=1';
   const t = Date.now().toString();
   const contentHash = crypto.createHash('sha256').update('').digest('hex');
-  const normalizedPath = normalizePath(path);
-  const stringToSign = ['GET', contentHash, '', normalizedPath].join('\n');
+  const requestPath = buildSignedPath(path);
+  const stringToSign = ['GET', contentHash, '', requestPath].join('\n');
   const sign = encrypt(`${clientId}${t}${stringToSign}`, clientSecret);
 
   return {
@@ -59,8 +59,8 @@ export function getRefreshSignHeaders(
 ): Record<string, string> {
   const t = Date.now().toString();
   const contentHash = crypto.createHash('sha256').update('').digest('hex');
-  const normalizedPath = normalizePath(refreshPath);
-  const stringToSign = ['GET', contentHash, '', normalizedPath].join('\n');
+  const requestPath = buildSignedPath(refreshPath);
+  const stringToSign = ['GET', contentHash, '', requestPath].join('\n');
   const sign = encrypt(`${clientId}${t}${stringToSign}`, clientSecret);
 
   return {
@@ -75,26 +75,29 @@ export function getRequestSign(
   clientId: string,
   clientSecret: string,
   accessToken: string,
-  method: string,
   path: string,
-  body?: unknown
+  method: string,
+  body: unknown = {}
 ): { path: string } & Record<string, string> {
   const t = Date.now().toString();
-  const normalizedPath = normalizePath(path);
-
   const upperMethod = method.toUpperCase();
-  const content =
-    upperMethod === 'GET' || body === undefined ? '' : JSON.stringify(body);
+  const requestPath = buildSignedPath(path);
+  const hasBody =
+    upperMethod !== 'GET' &&
+    body !== null &&
+    typeof body === 'object' &&
+    Object.keys(body as Record<string, unknown>).length > 0;
+  const content = hasBody ? JSON.stringify(body) : '';
   const contentHash = crypto.createHash('sha256').update(content).digest('hex');
 
-  const stringToSign = [upperMethod, contentHash, '', normalizedPath].join('\n');
+  const stringToSign = [upperMethod, contentHash, '', requestPath].join('\n');
   const sign = encrypt(
     `${clientId}${accessToken}${t}${stringToSign}`,
     clientSecret
   );
 
   return {
-    path: normalizedPath,
+    path: requestPath,
     t,
     sign_method: SIGN_METHOD,
     client_id: clientId,

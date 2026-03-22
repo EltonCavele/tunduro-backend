@@ -6,7 +6,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
 } from 'class-validator';
 
 export const AUTH_PASSWORD_REGEX =
@@ -49,6 +48,5 @@ export class UserLoginDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(AUTH_PASSWORD_REGEX)
   public password: string;
 }

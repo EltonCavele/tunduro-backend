@@ -2,7 +2,12 @@ import { randomUUID } from 'crypto';
 
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BookingStatus, Court, Prisma } from '@prisma/client';
+import {
+  BookingCheckoutSessionStatus,
+  BookingStatus,
+  Court,
+  Prisma,
+} from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { HelperNotificationService } from 'src/common/helper/services/helper.notification.service';
@@ -26,6 +31,10 @@ import {
 const BLOCKING_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.PENDING,
   BookingStatus.CONFIRMED,
+];
+const BLOCKING_CHECKOUT_SESSION_STATUSES: BookingCheckoutSessionStatus[] = [
+  BookingCheckoutSessionStatus.OPEN,
+  BookingCheckoutSessionStatus.FINALIZING,
 ];
 
 @Injectable()
@@ -225,44 +234,95 @@ export class CourtService {
         : {}),
     };
 
-    const [totalItems, bookings] = await Promise.all([
-      this.databaseService.booking.count({ where }),
-      this.databaseService.booking.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { startAt: 'desc' },
-        include: {
-          participants: {
-            select: {
-              userId: true,
+    const checkoutSessionWhere: Prisma.BookingCheckoutSessionWhereInput = {
+      courtId,
+      status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
+      expiresAt: {
+        gt: new Date(),
+      },
+      ...(start || end
+        ? {
+            AND: [
+              ...(start ? [{ endAt: { gte: start } }] : []),
+              ...(end ? [{ startAt: { lte: end } }] : []),
+            ],
+          }
+        : {}),
+    };
+
+    const [bookingCount, checkoutSessionCount, bookings, checkoutSessions] =
+      await Promise.all([
+        this.databaseService.booking.count({ where }),
+        this.databaseService.bookingCheckoutSession.count({
+          where: checkoutSessionWhere,
+        }),
+        this.databaseService.booking.findMany({
+          where,
+          orderBy: { startAt: 'desc' },
+          include: {
+            participants: {
+              select: {
+                userId: true,
+              },
             },
           },
-        },
-      }),
-    ]);
+        }),
+        this.databaseService.bookingCheckoutSession.findMany({
+          where: checkoutSessionWhere,
+          orderBy: { startAt: 'desc' },
+        }),
+      ]);
 
-    const items = bookings.map(item => {
-      if (!isAdmin) {
+    const totalItems = bookingCount + checkoutSessionCount;
+
+    const items = [
+      ...bookings.map(item => {
+        if (!isAdmin) {
+          return {
+            id: item.id,
+            startAt: item.startAt,
+            endAt: item.endAt,
+            status: item.status,
+          } as CourtBookingPublicResponseDto;
+        }
+
         return {
           id: item.id,
           startAt: item.startAt,
           endAt: item.endAt,
           status: item.status,
-        } as CourtBookingPublicResponseDto;
-      }
+          organizerId: item.organizerId,
+          participantIds: item.participants.map(
+            participant => participant.userId
+          ),
+        } as CourtBookingAdminResponseDto;
+      }),
+      ...checkoutSessions.map(item => {
+        if (!isAdmin) {
+          return {
+            id: item.id,
+            startAt: item.startAt,
+            endAt: item.endAt,
+            status: 'PAYMENT_PENDING',
+          } as CourtBookingPublicResponseDto;
+        }
 
-      return {
-        id: item.id,
-        startAt: item.startAt,
-        endAt: item.endAt,
-        status: item.status,
-        organizerId: item.organizerId,
-        participantIds: item.participants.map(
-          participant => participant.userId
-        ),
-      } as CourtBookingAdminResponseDto;
-    });
+        return {
+          id: item.id,
+          startAt: item.startAt,
+          endAt: item.endAt,
+          status: 'PAYMENT_PENDING',
+          organizerId: item.organizerId,
+          participantIds: Array.isArray(item.participantUserIds)
+            ? item.participantUserIds.filter(
+                participantId => typeof participantId === 'string'
+              )
+            : [],
+        } as CourtBookingAdminResponseDto;
+      }),
+    ]
+      .sort((left, right) => right.startAt.getTime() - left.startAt.getTime())
+      .slice((page - 1) * pageSize, page * pageSize);
 
     return {
       items,
