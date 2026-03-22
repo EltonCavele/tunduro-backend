@@ -3791,7 +3791,10 @@ export class BookingService {
   }
 
   private paymentReference(prefix: string): string {
-    return `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const normalizedPrefix = prefix.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const randomPart = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+
+    return `${normalizedPrefix}${Date.now()}${randomPart}`;
   }
 
   private assertCheckInWindow(booking: Booking): void {
