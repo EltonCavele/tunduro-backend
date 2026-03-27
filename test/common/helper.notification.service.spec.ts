@@ -24,7 +24,7 @@ describe('HelperNotificationService', () => {
     }).compile();
 
     service = module.get<HelperNotificationService>(HelperNotificationService);
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should be defined', () => {
@@ -62,14 +62,8 @@ describe('HelperNotificationService', () => {
       const values: Record<string, any> = {
         'notification.resend.enabled': true,
         'notification.resend.apiKey': 'resend-key',
-        'notification.resend.fromName': 'Tunduro',
-      };
-      return values[key];
-    });
-    mockConfigService.getOrThrow.mockImplementation((key: string) => {
-      const values: Record<string, any> = {
-        'notification.resend.apiKey': 'resend-key',
         'notification.resend.fromEmail': 'no-reply@tunduro.com',
+        'notification.resend.fromName': 'Tunduro',
       };
       return values[key];
     });
@@ -202,14 +196,8 @@ describe('HelperNotificationService', () => {
       const values: Record<string, any> = {
         'notification.resend.enabled': true,
         'notification.resend.apiKey': 'resend-key',
-        'notification.resend.fromName': '',
-      };
-      return values[key];
-    });
-    mockConfigService.getOrThrow.mockImplementation((key: string) => {
-      const values: Record<string, any> = {
-        'notification.resend.apiKey': 'resend-key',
         'notification.resend.fromEmail': 'no-reply@tunduro.com',
+        'notification.resend.fromName': '',
       };
       return values[key];
     });
@@ -239,14 +227,8 @@ describe('HelperNotificationService', () => {
       const values: Record<string, any> = {
         'notification.resend.enabled': true,
         'notification.resend.apiKey': 'resend-key',
-        'notification.resend.fromName': 'Tunduro',
-      };
-      return values[key];
-    });
-    mockConfigService.getOrThrow.mockImplementation((key: string) => {
-      const values: Record<string, any> = {
-        'notification.resend.apiKey': 'resend-key',
         'notification.resend.fromEmail': 'no-reply@tunduro.com',
+        'notification.resend.fromName': 'Tunduro',
       };
       return values[key];
     });
@@ -263,6 +245,30 @@ describe('HelperNotificationService', () => {
       success: false,
       provider: 'resend',
       error: 'resend down',
+    });
+  });
+
+  it('should return email failure when resend fromEmail is missing', async () => {
+    mockConfigService.get.mockImplementation((key: string) => {
+      const values: Record<string, any> = {
+        'notification.resend.enabled': true,
+        'notification.resend.apiKey': 'resend-key',
+        'notification.resend.fromEmail': '',
+        'notification.resend.fromName': 'Tunduro',
+      };
+      return values[key];
+    });
+
+    const result = await service.sendEmail({
+      to: 'john@example.com',
+      subject: 'Hello',
+      text: 'Body',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      provider: 'resend',
+      error: 'resend.email.misconfigured',
     });
   });
 });

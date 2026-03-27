@@ -92,15 +92,25 @@ export class HelperNotificationService implements IHelperNotificationService {
       };
     }
 
-    const apiKey = this.configService.getOrThrow<string>(
-      'notification.resend.apiKey'
-    );
-    const fromEmail = this.configService.getOrThrow<string>(
+    const apiKey = this.configService.get<string>('notification.resend.apiKey');
+    const fromEmail = this.configService.get<string>(
       'notification.resend.fromEmail'
     );
     const fromName = this.configService.get<string>(
       'notification.resend.fromName'
     );
+
+    if (!apiKey || !fromEmail) {
+      this.logger.error(
+        'Resend email misconfigured: missing apiKey or fromEmail'
+      );
+      return {
+        success: false,
+        provider: 'resend',
+        error: 'resend.email.misconfigured',
+      };
+    }
+
     const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     try {

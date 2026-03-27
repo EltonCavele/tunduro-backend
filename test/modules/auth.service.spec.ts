@@ -58,7 +58,7 @@ describe('AuthService', () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockNotificationService.isPushEnabled.mockReturnValue(true);
     mockNotificationService.isEmailEnabled.mockReturnValue(true);
     mockNotificationService.sendPush.mockResolvedValue({
@@ -307,6 +307,46 @@ describe('AuthService', () => {
         user: createdUser,
       });
     });
+
+    it('should not fail signup when verification email delivery fails', async () => {
+      const tokens = {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      };
+      const createdUser = {
+        id: 'new-user',
+        email: 'john@example.com',
+        role: Role.USER,
+        tokenVersion: 0,
+      };
+
+      mockDatabaseService.user.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockEncryptionService.createHash.mockResolvedValue('hashed-password');
+      mockDatabaseService.user.create.mockResolvedValue(createdUser);
+      mockDatabaseService.userOtp.deleteMany.mockResolvedValue({ count: 0 });
+      mockDatabaseService.userOtp.create.mockResolvedValue({
+        id: 'otp-id',
+      });
+      mockNotificationService.sendEmail.mockResolvedValue({
+        success: false,
+        provider: 'resend',
+        error: 'resend.email.failed',
+      });
+      mockEncryptionService.createJwtTokens.mockResolvedValue(tokens);
+
+      const result = await service.signup({
+        email: 'john@example.com',
+        password: 'Password1!',
+      });
+
+      expect(mockNotificationService.sendEmail).toHaveBeenCalled();
+      expect(result).toEqual({
+        ...tokens,
+        user: createdUser,
+      });
+    });
   });
 
   describe('refreshTokens', () => {
@@ -410,6 +450,32 @@ describe('AuthService', () => {
       });
     });
 
+    it('should not fail verification OTP request when email delivery fails', async () => {
+      mockDatabaseService.user.findFirst.mockResolvedValue({
+        id: 'user-id',
+        isVerified: false,
+        email: 'john@example.com',
+        deletedAt: null,
+      });
+      mockDatabaseService.userOtp.deleteMany.mockResolvedValue({ count: 0 });
+      mockDatabaseService.userOtp.create.mockResolvedValue({ id: 'otp-id' });
+      mockNotificationService.sendEmail.mockResolvedValue({
+        success: false,
+        provider: 'resend',
+        error: 'resend.email.failed',
+      });
+
+      const result = await service.requestAccountVerificationOtp({
+        identifier: 'john@example.com',
+        channel: 'EMAIL',
+      });
+
+      expect(result).toEqual({
+        success: true,
+        message: 'auth.success.verification-otp-sent',
+      });
+    });
+
     it('should verify account with valid OTP', async () => {
       mockDatabaseService.user.findFirst.mockResolvedValue({
         id: 'user-id',
@@ -484,6 +550,30 @@ describe('AuthService', () => {
         message: 'auth.success.password-reset-otp-sent',
       });
       expect(mockDatabaseService.userOtp.create).not.toHaveBeenCalled();
+    });
+
+    it('should not fail forgot password when email delivery fails', async () => {
+      mockDatabaseService.user.findFirst.mockResolvedValue({
+        id: 'user-id',
+        email: 'john@example.com',
+        deletedAt: null,
+      });
+      mockDatabaseService.userOtp.deleteMany.mockResolvedValue({ count: 0 });
+      mockDatabaseService.userOtp.create.mockResolvedValue({ id: 'otp-id' });
+      mockNotificationService.sendEmail.mockResolvedValue({
+        success: false,
+        provider: 'resend',
+        error: 'resend.email.failed',
+      });
+
+      const result = await service.forgotPassword({
+        identifier: 'john@example.com',
+      });
+
+      expect(result).toEqual({
+        success: true,
+        message: 'auth.success.password-reset-otp-sent',
+      });
     });
 
     it('should reset password with valid OTP', async () => {

@@ -2,6 +2,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { $Enums, Role } from '@prisma/client';
@@ -29,6 +30,7 @@ import { IAuthService } from '../interfaces/auth.service.interface';
 
 @Injectable()
 export class AuthService implements IAuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly OTP_EXPIRATION_MINUTES = 10;
   private readonly VERIFY_OTP_PREFIX = 'VERIFY';
   private readonly RESET_OTP_PREFIX = 'RESET';
@@ -482,6 +484,15 @@ export class AuthService implements IAuthService {
         });
 
     if (!result.success) {
+      if (!shouldUsePush) {
+        this.logger.warn(
+          `OTP ${intent} email delivery failed for user ${user.id}: ${
+            result.error ?? 'unknown error'
+          }`
+        );
+        return;
+      }
+
       throw new HttpException(
         'auth.error.notificationDeliveryFailed',
         HttpStatus.SERVICE_UNAVAILABLE
