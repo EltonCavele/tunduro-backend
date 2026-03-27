@@ -16,7 +16,9 @@ export class HelperNotificationService implements IHelperNotificationService {
   constructor(private readonly configService: ConfigService) {}
 
   isPushEnabled(): boolean {
-    return this.configService.get<boolean>('notification.expo.enabled') === true;
+    return (
+      this.configService.get<boolean>('notification.expo.enabled') === true
+    );
   }
 
   isEmailEnabled(): boolean {
@@ -37,7 +39,9 @@ export class HelperNotificationService implements IHelperNotificationService {
       };
     }
 
-    const endpoint = this.configService.get<string>('notification.expo.endpoint');
+    const endpoint = this.configService.get<string>(
+      'notification.expo.endpoint'
+    );
     const accessToken = this.configService.get<string>(
       'notification.expo.accessToken'
     );
@@ -94,7 +98,9 @@ export class HelperNotificationService implements IHelperNotificationService {
     const fromEmail = this.configService.getOrThrow<string>(
       'notification.resend.fromEmail'
     );
-    const fromName = this.configService.get<string>('notification.resend.fromName');
+    const fromName = this.configService.get<string>(
+      'notification.resend.fromName'
+    );
     const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     try {
@@ -121,6 +127,11 @@ export class HelperNotificationService implements IHelperNotificationService {
         details: response.data,
       };
     } catch (error: any) {
+      console.error(
+        'Resend email error:',
+        error?.response?.data ?? error?.message,
+        error
+      );
       this.logger.error(`Resend email failed: ${error?.message}`);
       return {
         success: false,
