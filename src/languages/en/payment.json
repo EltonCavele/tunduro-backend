@@ -1,5 +1,10 @@
 {
+  "success": {
+    "list": "Payments retrieved successfully",
+    "details": "Payment details retrieved successfully"
+  },
   "error": {
+    "notFound": "Payment transaction not found",
     "invalidWebhookPayload": "Invalid PaySuite webhook payload",
     "invalidWebhookSignature": "Invalid PaySuite webhook signature",
     "missingProviderPaymentId": "Missing provider payment identifier for this booking",

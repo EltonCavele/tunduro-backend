@@ -1,9 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  LightingActionSource,
-  LightingActionType,
-  OvertimeStatus,
-} from '@prisma/client';
+import { LightingActionSource, LightingActionType } from '@prisma/client';
 import { Expose } from 'class-transformer';
 
 export class LightingConfigResponseDto {
@@ -152,54 +148,4 @@ export class LightingActionLogResponseDto {
   @ApiProperty()
   @Expose()
   createdAt: Date;
-}
-
-export class OvertimeRequestResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  bookingId: string;
-
-  @ApiProperty()
-  @Expose()
-  requestedByUserId: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  approvedByUserId: string | null;
-
-  @ApiProperty()
-  @Expose()
-  blocks: number;
-
-  @ApiProperty({ enum: OvertimeStatus })
-  @Expose()
-  status: OvertimeStatus;
-
-  @ApiPropertyOptional()
-  @Expose()
-  declineReason: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  paymentTransactionId: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  expiresAt: Date | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  processedAt: Date | null;
-
-  @ApiProperty()
-  @Expose()
-  createdAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  updatedAt: Date;
 }

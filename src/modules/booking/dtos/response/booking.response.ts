@@ -3,9 +3,6 @@ import {
   BookingCheckoutSessionStatus,
   BookingStatus,
   InvitationStatus,
-  OpenGameJoinStatus,
-  OpenGameStatus,
-  OvertimeStatus,
   ParticipantStatus,
   PaymentStatus,
   PaymentType,
@@ -31,6 +28,10 @@ export class BookingInvitationResponseDto {
   @ApiProperty()
   @Expose()
   id: string;
+
+  @ApiProperty()
+  @Expose()
+  token: string;
 
   @ApiPropertyOptional()
   @Expose()
@@ -109,10 +110,6 @@ export class BookingResponseDto {
   @ApiProperty()
   @Expose()
   organizerId: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  seriesId: string | null;
 
   @ApiProperty()
   @Expose()
@@ -313,71 +310,6 @@ export class BookingCheckInQrResponseDto {
   qrPayload: string;
 }
 
-export class OpenGameJoinRequestResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  userId: string;
-
-  @ApiProperty({ enum: OpenGameJoinStatus })
-  @Expose()
-  status: OpenGameJoinStatus;
-
-  @ApiProperty()
-  @Expose()
-  createdAt: Date;
-}
-
-export class OpenGameResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  bookingId: string;
-
-  @ApiProperty()
-  @Expose()
-  organizerId: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  title: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  description: string | null;
-
-  @ApiProperty({ enum: OpenGameStatus })
-  @Expose()
-  status: OpenGameStatus;
-
-  @ApiProperty()
-  @Expose()
-  slotsTotal: number;
-
-  @ApiProperty()
-  @Expose()
-  slotsFilled: number;
-
-  @ApiProperty({ type: [OpenGameJoinRequestResponseDto] })
-  @Expose()
-  @Type(() => OpenGameJoinRequestResponseDto)
-  joinRequests: OpenGameJoinRequestResponseDto[];
-
-  @ApiProperty()
-  @Expose()
-  createdAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  updatedAt: Date;
-}
-
 export class CourtRatingResponseDto {
   @ApiProperty()
   @Expose()
@@ -410,56 +342,6 @@ export class CourtRatingResponseDto {
   @ApiPropertyOptional()
   @Expose()
   comment: string | null;
-
-  @ApiProperty()
-  @Expose()
-  createdAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  updatedAt: Date;
-}
-
-export class OvertimeRequestResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  bookingId: string;
-
-  @ApiProperty()
-  @Expose()
-  requestedByUserId: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  approvedByUserId: string | null;
-
-  @ApiProperty()
-  @Expose()
-  blocks: number;
-
-  @ApiProperty({ enum: OvertimeStatus })
-  @Expose()
-  status: OvertimeStatus;
-
-  @ApiPropertyOptional()
-  @Expose()
-  declineReason: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  paymentTransactionId: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  expiresAt: Date | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  processedAt: Date | null;
 
   @ApiProperty()
   @Expose()

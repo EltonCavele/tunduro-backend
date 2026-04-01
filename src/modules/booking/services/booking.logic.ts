@@ -6,8 +6,6 @@ import {
   Booking,
   BookingStatus,
   InvitationStatus,
-  OpenGameJoinStatus,
-  OpenGameStatus,
   ParticipantStatus,
   PaymentStatus,
   PaymentType,
@@ -31,12 +29,9 @@ import {
   BookingInviteRequestDto,
   BookingInvitationRespondRequestDto,
   BookingMeQueryRequestDto,
-  BookingMockPaymentConfirmRequestDto,
   BookingRescheduleRequestDto,
   CourtRatingCreateRequestDto,
   CourtRatingUpdateRequestDto,
-  OpenGameCreateRequestDto,
-  OpenGamesListQueryRequestDto,
   WaitlistCreateRequestDto,
 } from '../dtos/request/booking.request';
 import {
@@ -44,7 +39,6 @@ import {
   BookingCheckInQrResponseDto,
   BookingResponseDto,
   CourtRatingResponseDto,
-  OpenGameResponseDto,
   WaitlistResponseDto,
 } from '../dtos/response/booking.response';
 import {
@@ -84,7 +78,7 @@ export class BookingService {
   async createBooking(
     user: IAuthUser,
     payload: BookingCreateRequestDto
-  ): Promise<BookingResponseDto | BookingResponseDto[]> {
+  ): Promise<BookingResponseDto> {
     const court = await this.courtService.assertCourtIsBookable(
       payload.courtId
     );
@@ -106,30 +100,22 @@ export class BookingService {
     }
 
     const firstSlot = this.validateAndBuildSlot(payload.startAt, payload.endAt);
-
-    const slots = this.buildSlots(firstSlot, payload.recurrence);
-
-    if (slots.length > 12) {
-      throw new HttpException(
-        'booking.error.recurrenceLimitExceeded',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    for (const slot of slots) {
-      this.validateBookingWindow(slot.startAt, slot.endAt);
-      await this.assertOrganizerDailyDurationLimit(
-        user.userId,
-        slot.startAt,
-        slot.endAt
-      );
-      await this.assertCourtAvailability(court.id, slot.startAt, slot.endAt);
-      await this.assertOrganizerAvailability(
-        user.userId,
-        slot.startAt,
-        slot.endAt
-      );
-    }
+    this.validateBookingWindow(firstSlot.startAt, firstSlot.endAt);
+    await this.assertOrganizerDailyDurationLimit(
+      user.userId,
+      firstSlot.startAt,
+      firstSlot.endAt
+    );
+    await this.assertCourtAvailability(
+      court.id,
+      firstSlot.startAt,
+      firstSlot.endAt
+    );
+    await this.assertOrganizerAvailability(
+      user.userId,
+      firstSlot.startAt,
+      firstSlot.endAt
+    );
 
     const usersById = await this.fetchUsersByIds(participantUserIds);
 
@@ -139,125 +125,102 @@ export class BookingService {
       firstSlot.durationMinutes
     );
 
-    const result = await this.databaseService.$transaction(async tx => {
-      let seriesId: string | null = null;
+    const booking = await this.databaseService.$transaction(async tx => {
+      const createdBooking = await tx.booking.create({
+        data: {
+          courtId: court.id,
+          organizerId: user.userId,
+          startAt: firstSlot.startAt,
+          endAt: firstSlot.endAt,
+          durationMinutes: firstSlot.durationMinutes,
+          totalPrice: amountPerSlot,
+          currency: court.currency,
+          paidAmount: this.decimal(0),
+          status: BookingStatus.PENDING,
+          paymentDueAt: this.addMinutes(now, PAYMENT_PENDING_MINUTES),
+        },
+      });
 
-      if (payload.recurrence?.weekly) {
-        const series = await tx.bookingSeries.create({
-          data: {
-            organizerId: user.userId,
-            courtId: court.id,
-            startsAt: firstSlot.startAt,
-            occurrences: slots.length,
-            intervalWeeks: 1,
-            status: 'ACTIVE',
-          },
-        });
-        seriesId = series.id;
-      }
+      await tx.bookingStatusHistory.create({
+        data: {
+          bookingId: createdBooking.id,
+          fromStatus: null,
+          toStatus: BookingStatus.PENDING,
+          reason: 'booking_created',
+          changedByUserId: user.userId,
+        },
+      });
 
-      const createdBookings: Booking[] = [];
+      await tx.bookingParticipant.create({
+        data: {
+          bookingId: createdBooking.id,
+          userId: user.userId,
+          status: ParticipantStatus.ACCEPTED,
+          isOrganizer: true,
+        },
+      });
 
-      for (const slot of slots) {
-        const booking = await tx.booking.create({
-          data: {
-            courtId: court.id,
-            organizerId: user.userId,
-            seriesId,
-            startAt: slot.startAt,
-            endAt: slot.endAt,
-            durationMinutes: slot.durationMinutes,
-            totalPrice: amountPerSlot,
-            currency: court.currency,
-            paidAmount: this.decimal(0),
-            status: BookingStatus.PENDING,
-            paymentDueAt: this.addMinutes(now, PAYMENT_PENDING_MINUTES),
-          },
-        });
-
-        await tx.bookingStatusHistory.create({
-          data: {
-            bookingId: booking.id,
-            fromStatus: null,
-            toStatus: BookingStatus.PENDING,
-            reason: 'booking_created',
-            changedByUserId: user.userId,
-          },
-        });
-
-        await tx.bookingParticipant.create({
-          data: {
-            bookingId: booking.id,
-            userId: user.userId,
-            status: ParticipantStatus.ACCEPTED,
-            isOrganizer: true,
-          },
-        });
-
-        for (const participantUserId of participantUserIds) {
-          await tx.bookingParticipant.upsert({
-            where: {
-              bookingId_userId: {
-                bookingId: booking.id,
-                userId: participantUserId,
-              },
-            },
-            create: {
-              bookingId: booking.id,
+      for (const participantUserId of participantUserIds) {
+        await tx.bookingParticipant.upsert({
+          where: {
+            bookingId_userId: {
+              bookingId: createdBooking.id,
               userId: participantUserId,
-              status: ParticipantStatus.INVITED,
-              isOrganizer: false,
             },
-            update: {
-              status: ParticipantStatus.INVITED,
-            },
-          });
-
-          await tx.bookingInvitation.create({
-            data: {
-              bookingId: booking.id,
-              inviterUserId: user.userId,
-              invitedUserId: participantUserId,
-              token: randomUUID(),
-              status: InvitationStatus.PENDING,
-              expiresAt: this.addHours(now, 24),
-            },
-          });
-        }
-
-        for (const email of inviteEmails) {
-          await tx.bookingInvitation.create({
-            data: {
-              bookingId: booking.id,
-              inviterUserId: user.userId,
-              inviteeEmail: email,
-              token: randomUUID(),
-              status: InvitationStatus.PENDING,
-              expiresAt: this.addHours(now, 24),
-            },
-          });
-        }
-
-        await tx.paymentTransaction.create({
-          data: {
-            bookingId: booking.id,
-            userId: user.userId,
-            type: PaymentType.BOOKING,
-            status: PaymentStatus.PENDING,
-            amount: amountPerSlot,
-            currency: court.currency,
-            reference: this.paymentReference('BK'),
-            metadata: {
-              timezone: CLUB_TIMEZONE,
-              source: 'create_booking',
-            },
+          },
+          create: {
+            bookingId: createdBooking.id,
+            userId: participantUserId,
+            status: ParticipantStatus.INVITED,
+            isOrganizer: false,
+          },
+          update: {
+            status: ParticipantStatus.INVITED,
           },
         });
 
-        createdBookings.push(booking);
+        await tx.bookingInvitation.create({
+          data: {
+            bookingId: createdBooking.id,
+            inviterUserId: user.userId,
+            invitedUserId: participantUserId,
+            token: randomUUID(),
+            status: InvitationStatus.PENDING,
+            expiresAt: this.addHours(now, 24),
+          },
+        });
       }
 
-      return createdBookings;
+      for (const email of inviteEmails) {
+        await tx.bookingInvitation.create({
+          data: {
+            bookingId: createdBooking.id,
+            inviterUserId: user.userId,
+            inviteeEmail: email,
+            token: randomUUID(),
+            status: InvitationStatus.PENDING,
+            expiresAt: this.addHours(now, 24),
+          },
+        });
+      }
+
+      await tx.paymentTransaction.create({
+        data: {
+          bookingId: createdBooking.id,
+          userId: user.userId,
+          type: PaymentType.BOOKING,
+          status: PaymentStatus.PENDING,
+          amount: amountPerSlot,
+          currency: court.currency,
+          reference: this.paymentReference('BK'),
+          metadata: {
+            timezone: CLUB_TIMEZONE,
+            source: 'create_booking',
+          },
+        },
+      });
+
+      return createdBooking;
     });
 
     for (const invitedUser of usersById.values()) {
@@ -276,16 +239,7 @@ export class BookingService {
       );
     }
 
-    if (result.length === 1) {
-      return this.getBookingForUser(user, result[0].id);
-    }
-
-    const bookings: BookingResponseDto[] = [];
-    for (const booking of result) {
-      bookings.push(await this.getBookingForUser(user, booking.id));
-    }
-
-    return bookings;
+    return this.getBookingForUser(user, booking.id);
   }
 
   async startBookingCheckout(
@@ -465,9 +419,8 @@ export class BookingService {
 
   async confirmBookingPayment(
     user: IAuthUser,
-    bookingId: string,
-    payload: BookingMockPaymentConfirmRequestDto
-  ): Promise<BookingResponseDto | BookingResponseDto[]> {
+    bookingId: string
+  ): Promise<BookingResponseDto> {
     const booking = await this.databaseService.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -486,18 +439,7 @@ export class BookingService {
       );
     }
 
-    const targetBookings =
-      payload.applyToSeries && booking.seriesId
-        ? await this.databaseService.booking.findMany({
-            where: {
-              seriesId: booking.seriesId,
-              status: BookingStatus.PENDING,
-            },
-            orderBy: { startAt: 'asc' },
-          })
-        : [booking];
-
-    if (targetBookings.length === 0) {
+    if (booking.status !== BookingStatus.PENDING) {
       throw new HttpException(
         'booking.error.nothingToConfirm',
         HttpStatus.BAD_REQUEST
@@ -507,58 +449,43 @@ export class BookingService {
     const now = new Date();
 
     await this.databaseService.$transaction(async tx => {
-      for (const target of targetBookings) {
-        if (target.status !== BookingStatus.PENDING) {
-          continue;
-        }
+      await tx.paymentTransaction.updateMany({
+        where: {
+          bookingId: booking.id,
+          type: PaymentType.BOOKING,
+          status: PaymentStatus.PENDING,
+        },
+        data: {
+          status: PaymentStatus.COMPLETED,
+          processedAt: now,
+        },
+      });
 
-        await tx.paymentTransaction.updateMany({
-          where: {
-            bookingId: target.id,
-            type: PaymentType.BOOKING,
-            status: PaymentStatus.PENDING,
-          },
-          data: {
-            status: PaymentStatus.COMPLETED,
-            processedAt: now,
-          },
-        });
+      await tx.booking.update({
+        where: { id: booking.id },
+        data: {
+          status: BookingStatus.CONFIRMED,
+          paidAmount: booking.totalPrice,
+          checkInToken: randomUUID(),
+          checkInTokenExpiresAt: this.addMinutes(
+            booking.startAt,
+            CHECKIN_AFTER_MINUTES
+          ),
+        },
+      });
 
-        await tx.booking.update({
-          where: { id: target.id },
-          data: {
-            status: BookingStatus.CONFIRMED,
-            paidAmount: target.totalPrice,
-            checkInToken: randomUUID(),
-            checkInTokenExpiresAt: this.addMinutes(
-              target.startAt,
-              CHECKIN_AFTER_MINUTES
-            ),
-          },
-        });
-
-        await tx.bookingStatusHistory.create({
-          data: {
-            bookingId: target.id,
-            fromStatus: BookingStatus.PENDING,
-            toStatus: BookingStatus.CONFIRMED,
-            reason: 'payment_confirmed',
-            changedByUserId: user.userId,
-          },
-        });
-      }
+      await tx.bookingStatusHistory.create({
+        data: {
+          bookingId: booking.id,
+          fromStatus: BookingStatus.PENDING,
+          toStatus: BookingStatus.CONFIRMED,
+          reason: 'payment_confirmed',
+          changedByUserId: user.userId,
+        },
+      });
     });
 
-    if (targetBookings.length === 1) {
-      return this.getBookingForUser(user, targetBookings[0].id);
-    }
-
-    const response: BookingResponseDto[] = [];
-    for (const target of targetBookings) {
-      response.push(await this.getBookingForUser(user, target.id));
-    }
-
-    return response;
+    return this.getBookingForUser(user, booking.id);
   }
 
   async getMyBookings(
@@ -802,16 +729,6 @@ export class BookingService {
           },
         });
       }
-
-      await tx.openGame.updateMany({
-        where: {
-          bookingId: booking.id,
-          status: { in: [OpenGameStatus.OPEN, OpenGameStatus.FULL] },
-        },
-        data: {
-          status: OpenGameStatus.CANCELLED,
-        },
-      });
     });
 
     await this.promoteWaitlistForSlot(
@@ -1467,30 +1384,6 @@ export class BookingService {
           status: InvitationStatus.REVOKED,
         },
       });
-
-      const openGame = await tx.openGame.findUnique({
-        where: { bookingId },
-      });
-
-      if (openGame) {
-        const acceptedParticipants = await tx.bookingParticipant.count({
-          where: {
-            bookingId,
-            status: ParticipantStatus.ACCEPTED,
-          },
-        });
-
-        await tx.openGame.update({
-          where: { bookingId },
-          data: {
-            slotsFilled: acceptedParticipants,
-            status:
-              acceptedParticipants >= openGame.slotsTotal
-                ? OpenGameStatus.FULL
-                : OpenGameStatus.OPEN,
-          },
-        });
-      }
     });
 
     return this.getBookingForUser(user, bookingId);
@@ -1785,361 +1678,6 @@ export class BookingService {
     });
 
     return this.getBookingForUser(user, booking.id);
-  }
-
-  async createOpenGame(
-    user: IAuthUser,
-    bookingId: string,
-    payload: OpenGameCreateRequestDto
-  ): Promise<OpenGameResponseDto> {
-    const booking = await this.databaseService.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        court: true,
-        participants: true,
-        openGame: {
-          include: {
-            joinRequests: true,
-          },
-        },
-      },
-    });
-
-    if (!booking) {
-      throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
-    }
-
-    if (booking.organizerId !== user.userId && user.role !== Role.ADMIN) {
-      throw new HttpException(
-        'auth.error.insufficientPermissions',
-        HttpStatus.FORBIDDEN
-      );
-    }
-
-    if (booking.status !== BookingStatus.CONFIRMED) {
-      throw new HttpException(
-        'openGame.error.onlyConfirmedBookingAllowed',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    if (booking.openGame) {
-      return this.serializeOpenGame(booking.openGame);
-    }
-
-    const acceptedParticipants = booking.participants.filter(
-      participant => participant.status === ParticipantStatus.ACCEPTED
-    ).length;
-
-    const slotsTotal = Math.max(
-      acceptedParticipants,
-      Math.min(
-        payload.slotsTotal ?? booking.court.maxPlayers,
-        booking.court.maxPlayers
-      )
-    );
-
-    const created = await this.databaseService.openGame.create({
-      data: {
-        bookingId: booking.id,
-        organizerId: booking.organizerId,
-        title: payload.title?.trim() || null,
-        description: payload.description?.trim() || null,
-        status:
-          acceptedParticipants >= slotsTotal
-            ? OpenGameStatus.FULL
-            : OpenGameStatus.OPEN,
-        slotsTotal,
-        slotsFilled: acceptedParticipants,
-      },
-      include: {
-        joinRequests: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    return this.serializeOpenGame(created);
-  }
-
-  async listOpenGames(
-    query: OpenGamesListQueryRequestDto
-  ): Promise<ApiPaginatedDataDto<OpenGameResponseDto>> {
-    const page = this.safePage(query.page);
-    const pageSize = this.safePageSize(query.pageSize, 20);
-
-    const status = this.parseOpenGameStatus(query.status);
-
-    const where: Prisma.OpenGameWhereInput = {
-      ...(status ? { status } : {}),
-    };
-
-    const [totalItems, games] = await Promise.all([
-      this.databaseService.openGame.count({ where }),
-      this.databaseService.openGame.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          joinRequests: {
-            orderBy: { createdAt: 'desc' },
-          },
-        },
-      }),
-    ]);
-
-    return {
-      items: games.map(game => this.serializeOpenGame(game)),
-      metadata: {
-        currentPage: page,
-        itemsPerPage: pageSize,
-        totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
-      },
-    };
-  }
-
-  async requestJoinOpenGame(
-    user: IAuthUser,
-    openGameId: string
-  ): Promise<OpenGameResponseDto> {
-    const openGame = await this.databaseService.openGame.findUnique({
-      where: { id: openGameId },
-      include: {
-        booking: {
-          include: {
-            participants: true,
-          },
-        },
-        joinRequests: true,
-      },
-    });
-
-    if (!openGame) {
-      throw new HttpException('openGame.error.notFound', HttpStatus.NOT_FOUND);
-    }
-
-    if (openGame.status !== OpenGameStatus.OPEN) {
-      throw new HttpException('openGame.error.notOpen', HttpStatus.BAD_REQUEST);
-    }
-
-    const alreadyParticipant = openGame.booking.participants.some(
-      participant =>
-        participant.userId === user.userId &&
-        participant.status === ParticipantStatus.ACCEPTED
-    );
-
-    if (alreadyParticipant) {
-      throw new HttpException(
-        'openGame.error.alreadyParticipant',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    const existingRequest = openGame.joinRequests.find(
-      request =>
-        request.userId === user.userId &&
-        request.status === OpenGameJoinStatus.PENDING
-    );
-
-    if (existingRequest) {
-      throw new HttpException(
-        'openGame.error.requestAlreadyExists',
-        HttpStatus.CONFLICT
-      );
-    }
-
-    await this.databaseService.openGameJoinRequest.create({
-      data: {
-        openGameId,
-        userId: user.userId,
-        status: OpenGameJoinStatus.PENDING,
-      },
-    });
-
-    const refreshed = await this.databaseService.openGame.findUnique({
-      where: { id: openGameId },
-      include: {
-        joinRequests: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    if (!refreshed) {
-      throw new HttpException('openGame.error.notFound', HttpStatus.NOT_FOUND);
-    }
-
-    await this.notifyUsersByIds(
-      [openGame.organizerId],
-      'Open game join request',
-      'A user requested to join your open game.'
-    );
-
-    return this.serializeOpenGame(refreshed);
-  }
-
-  async handleJoinRequest(
-    user: IAuthUser,
-    openGameId: string,
-    requestId: string,
-    approve: boolean
-  ): Promise<OpenGameResponseDto> {
-    const openGame = await this.databaseService.openGame.findUnique({
-      where: { id: openGameId },
-      include: {
-        booking: {
-          include: {
-            participants: true,
-          },
-        },
-      },
-    });
-
-    if (!openGame) {
-      throw new HttpException('openGame.error.notFound', HttpStatus.NOT_FOUND);
-    }
-
-    if (openGame.organizerId !== user.userId && user.role !== Role.ADMIN) {
-      throw new HttpException(
-        'auth.error.insufficientPermissions',
-        HttpStatus.FORBIDDEN
-      );
-    }
-
-    const request = await this.databaseService.openGameJoinRequest.findFirst({
-      where: {
-        id: requestId,
-        openGameId,
-      },
-    });
-
-    if (!request) {
-      throw new HttpException(
-        'openGame.error.requestNotFound',
-        HttpStatus.NOT_FOUND
-      );
-    }
-
-    if (request.status !== OpenGameJoinStatus.PENDING) {
-      throw new HttpException(
-        'openGame.error.requestAlreadyHandled',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    if (!approve) {
-      await this.databaseService.openGameJoinRequest.update({
-        where: { id: request.id },
-        data: {
-          status: OpenGameJoinStatus.DECLINED,
-          respondedById: user.userId,
-          respondedAt: new Date(),
-        },
-      });
-
-      const updatedDeclined = await this.databaseService.openGame.findUnique({
-        where: { id: openGameId },
-        include: {
-          joinRequests: {
-            orderBy: { createdAt: 'desc' },
-          },
-        },
-      });
-
-      if (!updatedDeclined) {
-        throw new HttpException(
-          'openGame.error.notFound',
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      return this.serializeOpenGame(updatedDeclined);
-    }
-
-    const acceptedCount = await this.databaseService.bookingParticipant.count({
-      where: {
-        bookingId: openGame.bookingId,
-        status: ParticipantStatus.ACCEPTED,
-      },
-    });
-
-    if (acceptedCount >= openGame.slotsTotal) {
-      throw new HttpException(
-        'openGame.error.alreadyFull',
-        HttpStatus.CONFLICT
-      );
-    }
-
-    await this.assertParticipantAvailability(
-      request.userId,
-      openGame.booking.startAt,
-      openGame.booking.endAt,
-      openGame.bookingId
-    );
-
-    await this.databaseService.$transaction(async tx => {
-      await tx.bookingParticipant.upsert({
-        where: {
-          bookingId_userId: {
-            bookingId: openGame.bookingId,
-            userId: request.userId,
-          },
-        },
-        create: {
-          bookingId: openGame.bookingId,
-          userId: request.userId,
-          status: ParticipantStatus.ACCEPTED,
-          isOrganizer: false,
-        },
-        update: {
-          status: ParticipantStatus.ACCEPTED,
-        },
-      });
-
-      await tx.openGameJoinRequest.update({
-        where: { id: request.id },
-        data: {
-          status: OpenGameJoinStatus.APPROVED,
-          respondedAt: new Date(),
-          respondedById: user.userId,
-        },
-      });
-
-      const updatedCount = await tx.bookingParticipant.count({
-        where: {
-          bookingId: openGame.bookingId,
-          status: ParticipantStatus.ACCEPTED,
-        },
-      });
-
-      await tx.openGame.update({
-        where: { id: openGame.id },
-        data: {
-          slotsFilled: updatedCount,
-          status:
-            updatedCount >= openGame.slotsTotal
-              ? OpenGameStatus.FULL
-              : OpenGameStatus.OPEN,
-        },
-      });
-    });
-
-    const updated = await this.databaseService.openGame.findUnique({
-      where: { id: openGame.id },
-      include: {
-        joinRequests: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    if (!updated) {
-      throw new HttpException('openGame.error.notFound', HttpStatus.NOT_FOUND);
-    }
-
-    return this.serializeOpenGame(updated);
   }
 
   async createRating(
@@ -2681,7 +2219,6 @@ export class BookingService {
       id: booking.id,
       courtId: booking.courtId,
       organizerId: booking.organizerId,
-      seriesId: booking.seriesId ?? null,
       startAt: booking.startAt,
       endAt: booking.endAt,
       durationMinutes: booking.durationMinutes,
@@ -2698,6 +2235,7 @@ export class BookingService {
       })),
       invitations: (booking.invitations ?? []).map((item: any) => ({
         id: item.id,
+        token: item.token,
         invitedUserId: item.invitedUserId ?? null,
         inviteeEmail: item.inviteeEmail ?? null,
         status: item.status,
@@ -2760,27 +2298,6 @@ export class BookingService {
       position: entry.position,
       bookingId: entry.bookingId ?? null,
       offerExpiresAt: entry.offerExpiresAt ?? null,
-    };
-  }
-
-  private serializeOpenGame(openGame: any): OpenGameResponseDto {
-    return {
-      id: openGame.id,
-      bookingId: openGame.bookingId,
-      organizerId: openGame.organizerId,
-      title: openGame.title ?? null,
-      description: openGame.description ?? null,
-      status: openGame.status,
-      slotsTotal: openGame.slotsTotal,
-      slotsFilled: openGame.slotsFilled,
-      joinRequests: (openGame.joinRequests ?? []).map((request: any) => ({
-        id: request.id,
-        userId: request.userId,
-        status: request.status,
-        createdAt: request.createdAt,
-      })),
-      createdAt: openGame.createdAt,
-      updatedAt: openGame.updatedAt,
     };
   }
 
@@ -3350,35 +2867,6 @@ export class BookingService {
     };
   }
 
-  private buildSlots(
-    firstSlot: { startAt: Date; endAt: Date; durationMinutes: number },
-    recurrence?: { weekly: boolean; occurrences: number }
-  ): { startAt: Date; endAt: Date; durationMinutes: number }[] {
-    if (!recurrence?.weekly) {
-      return [firstSlot];
-    }
-
-    const occurrences = recurrence.occurrences;
-    if (occurrences < 2 || occurrences > 12) {
-      throw new HttpException(
-        'booking.error.recurrenceLimitExceeded',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    const slots: { startAt: Date; endAt: Date; durationMinutes: number }[] = [];
-
-    for (let index = 0; index < occurrences; index += 1) {
-      slots.push({
-        startAt: this.addDays(firstSlot.startAt, index * 7),
-        endAt: this.addDays(firstSlot.endAt, index * 7),
-        durationMinutes: firstSlot.durationMinutes,
-      });
-    }
-
-    return slots;
-  }
-
   private validateBookingWindow(startAt: Date, _endAt: Date): void {
     const now = new Date();
     if (startAt < this.addMinutes(now, MIN_LEAD_MINUTES)) {
@@ -3662,19 +3150,6 @@ export class BookingService {
 
     const normalized = value.trim().toUpperCase() as BookingStatus;
     if (!Object.values(BookingStatus).includes(normalized)) {
-      return undefined;
-    }
-
-    return normalized;
-  }
-
-  private parseOpenGameStatus(value?: string): OpenGameStatus | undefined {
-    if (!value) {
-      return undefined;
-    }
-
-    const normalized = value.trim().toUpperCase() as OpenGameStatus;
-    if (!Object.values(OpenGameStatus).includes(normalized)) {
       return undefined;
     }
 

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
-import { BookingOvertimeService } from 'src/modules/booking/services/booking.overtime.service';
 import { BookingService } from 'src/modules/booking/services/booking.service';
 import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
 
@@ -11,7 +10,6 @@ export class BookingScheduler {
 
   constructor(
     private readonly bookingService: BookingService,
-    private readonly bookingOvertimeService: BookingOvertimeService,
     private readonly lightingOrchestratorService: LightingOrchestratorService
   ) {}
 
@@ -25,7 +23,6 @@ export class BookingScheduler {
       noShows,
       completed,
       expiredOffers,
-      expiredOvertimePayments,
       lightingProcessed,
     ] = await Promise.all([
       this.bookingService.processPendingPaymentExpirations(),
@@ -35,7 +32,6 @@ export class BookingScheduler {
       this.bookingService.processNoShows(),
       this.bookingService.processCompletions(),
       this.bookingService.processWaitlistOfferExpirations(),
-      this.bookingOvertimeService.processPaymentExpirations(),
       this.lightingOrchestratorService.processAutomaticLighting(),
     ]);
 
@@ -47,11 +43,10 @@ export class BookingScheduler {
       noShows ||
       completed ||
       expiredOffers ||
-      expiredOvertimePayments ||
       lightingProcessed
     ) {
       this.logger.log(
-        `Lifecycle updates -> expiredPayments=${expiredPayments}, expiredCheckoutSessions=${expiredCheckoutSessions}, reconciledCheckoutSessions=${reconciledCheckoutSessions}, reconciledRefunds=${reconciledRefunds}, noShows=${noShows}, completed=${completed}, expiredOffers=${expiredOffers}, expiredOvertimePayments=${expiredOvertimePayments}, lightingProcessed=${lightingProcessed}`
+        `Lifecycle updates -> expiredPayments=${expiredPayments}, expiredCheckoutSessions=${expiredCheckoutSessions}, reconciledCheckoutSessions=${reconciledCheckoutSessions}, reconciledRefunds=${reconciledRefunds}, noShows=${noShows}, completed=${completed}, expiredOffers=${expiredOffers}, lightingProcessed=${lightingProcessed}`
       );
     }
   }

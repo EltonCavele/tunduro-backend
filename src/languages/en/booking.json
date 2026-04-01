@@ -15,12 +15,7 @@
     "invitationResponded": "Invitation response saved successfully",
     "participantRemoved": "Participant removed successfully",
     "checkInQr": "Check-in QR generated successfully",
-    "checkedIn": "Booking checked in successfully",
-    "overtimeRequested": "Overtime request created successfully",
-    "overtimeList": "Overtime requests retrieved successfully",
-    "overtimeApproved": "Overtime request approved successfully",
-    "overtimeDeclined": "Overtime request declined successfully",
-    "overtimePaymentConfirmed": "Overtime payment confirmed successfully"
+    "checkedIn": "Booking checked in successfully"
   },
   "error": {
     "notFound": "Booking not found",
@@ -49,16 +44,6 @@
     "organizerCannotBeRemoved": "Booking organizer cannot be removed",
     "checkInUnavailable": "Check-in is unavailable for this booking",
     "invalidCheckInToken": "Invalid check-in token",
-    "checkInWindowClosed": "Check-in is outside the allowed time window",
-    "recurrenceLimitExceeded": "Weekly recurrence supports up to 12 occurrences",
-    "overtimeOnlyConfirmed": "Overtime is only available for confirmed bookings",
-    "overtimeWindowClosed": "Overtime request window is closed",
-    "overtimeRequiresPaidBooking": "Booking must be fully paid before requesting overtime",
-    "overtimeAlreadyPending": "There is already a pending overtime request for this booking",
-    "overtimeNotFound": "Overtime request not found",
-    "overtimeInvalidState": "Overtime request cannot be processed in current state",
-    "overtimePaymentNotPending": "Overtime payment is not pending",
-    "overtimePaymentMissing": "Overtime payment transaction is missing",
-    "overtimePaymentExpired": "Overtime payment window has expired"
+    "checkInWindowClosed": "Check-in is outside the allowed time window"
   }
 }

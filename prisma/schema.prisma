@@ -85,20 +85,6 @@ enum WaitlistStatus {
   CANCELLED
 }
 
-enum OpenGameStatus {
-  OPEN
-  FULL
-  CLOSED
-  CANCELLED
-}
-
-enum OpenGameJoinStatus {
-  PENDING
-  APPROVED
-  DECLINED
-  CANCELLED
-}
-
 enum LightingActionSource {
   SYSTEM
   ADMIN
@@ -112,15 +98,6 @@ enum LightingActionType {
   EXTEND
   TEST_SWITCH
   STATUS_SYNC
-}
-
-enum OvertimeStatus {
-  PENDING
-  APPROVED
-  DECLINED
-  PAYMENT_PENDING
-  PAID
-  EXPIRED
 }
 
 model User {
@@ -153,15 +130,9 @@ model User {
   receivedInvitations     BookingInvitation[]      @relation("ReceivedInvitations")
   paymentTransactions     PaymentTransaction[]
   waitlistEntries         WaitlistEntry[]
-  openGames               OpenGame[]               @relation("OpenGameOrganizer")
-  openGameJoinRequests    OpenGameJoinRequest[]    @relation("OpenGameJoinRequester")
-  openGameJoinResponses   OpenGameJoinRequest[]    @relation("OpenGameJoinResponder")
   courtRatings            CourtRating[]
   bookingStatusChanges    BookingStatusHistory[]   @relation("BookingStatusChangedBy")
   checkInBookings         Booking[]                @relation("CheckInByUser")
-  bookingSeries           BookingSeries[]          @relation("BookingSeriesOrganizer")
-  overtimeRequests        OvertimeRequest[]        @relation("OvertimeRequestedBy")
-  overtimeApprovals       OvertimeRequest[]        @relation("OvertimeApprovedBy")
   lightingActions         LightingActionLog[]      @relation("LightingActionRequestedBy")
   bookingCheckoutSessions BookingCheckoutSession[]
 
@@ -208,7 +179,6 @@ model Court {
   bookingCheckoutSessions BookingCheckoutSession[]
   ratings                 CourtRating[]
   waitlistEntries         WaitlistEntry[]
-  bookingSeries           BookingSeries[]
   lightingActionLogs      LightingActionLog[]
   lightingDeviceState     LightingDeviceState?
 
@@ -230,30 +200,10 @@ model CourtImage {
   @@map("court_images")
 }
 
-model BookingSeries {
-  id            String   @id @default(uuid())
-  organizerId   String
-  courtId       String
-  startsAt      DateTime
-  intervalWeeks Int      @default(1)
-  occurrences   Int
-  status        String   @default("ACTIVE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  organizer User      @relation("BookingSeriesOrganizer", fields: [organizerId], references: [id])
-  court     Court     @relation(fields: [courtId], references: [id])
-  bookings  Booking[]
-
-  @@index([organizerId, status])
-  @@map("booking_series")
-}
-
 model Booking {
   id                    String        @id @default(uuid())
   courtId               String
   organizerId           String
-  seriesId              String?
   startAt               DateTime
   endAt                 DateTime
   durationMinutes       Int
@@ -272,21 +222,18 @@ model Booking {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 
-  court         Court          @relation(fields: [courtId], references: [id])
-  organizer     User           @relation("OrganizerBookings", fields: [organizerId], references: [id])
-  series        BookingSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
-  checkInByUser User?          @relation("CheckInByUser", fields: [checkInByUserId], references: [id], onDelete: SetNull)
+  court         Court @relation(fields: [courtId], references: [id])
+  organizer     User  @relation("OrganizerBookings", fields: [organizerId], references: [id])
+  checkInByUser User? @relation("CheckInByUser", fields: [checkInByUserId], references: [id], onDelete: SetNull)
 
   participants       BookingParticipant[]
   invitations        BookingInvitation[]
   statusHistory      BookingStatusHistory[]
   payments           PaymentTransaction[]
   checkoutSession    BookingCheckoutSession?
-  openGame           OpenGame?
   ratings            CourtRating[]
   waitlistEntries    WaitlistEntry[]         @relation("WaitlistBooking")
   lightingActionLogs LightingActionLog[]
-  overtimeRequests   OvertimeRequest[]
 
   @@index([courtId, startAt, endAt])
   @@index([organizerId, startAt])
@@ -363,9 +310,8 @@ model PaymentTransaction {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  user            User             @relation(fields: [userId], references: [id])
-  overtimeRequest OvertimeRequest?
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
 
   @@index([bookingId, status])
   @@index([userId, type])
@@ -434,45 +380,6 @@ model WaitlistEntry {
   @@map("waitlist_entries")
 }
 
-model OpenGame {
-  id          String         @id @default(uuid())
-  bookingId   String         @unique
-  organizerId String
-  title       String?
-  description String?
-  status      OpenGameStatus @default(OPEN)
-  slotsTotal  Int
-  slotsFilled Int            @default(1)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  booking      Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  organizer    User                  @relation("OpenGameOrganizer", fields: [organizerId], references: [id])
-  joinRequests OpenGameJoinRequest[]
-
-  @@index([status, createdAt])
-  @@map("open_games")
-}
-
-model OpenGameJoinRequest {
-  id            String             @id @default(uuid())
-  openGameId    String
-  userId        String
-  status        OpenGameJoinStatus @default(PENDING)
-  respondedById String?
-  respondedAt   DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-
-  openGame    OpenGame @relation(fields: [openGameId], references: [id], onDelete: Cascade)
-  user        User     @relation("OpenGameJoinRequester", fields: [userId], references: [id])
-  respondedBy User?    @relation("OpenGameJoinResponder", fields: [respondedById], references: [id], onDelete: SetNull)
-
-  @@unique([openGameId, userId])
-  @@index([status, createdAt])
-  @@map("open_game_join_requests")
-}
-
 model CourtRating {
   id               String   @id @default(uuid())
   courtId          String
@@ -534,29 +441,4 @@ model LightingDeviceState {
 
   @@index([isOnline, updatedAt])
   @@map("lighting_device_states")
-}
-
-model OvertimeRequest {
-  id                   String         @id @default(uuid())
-  bookingId            String
-  requestedByUserId    String
-  blocks               Int
-  status               OvertimeStatus @default(PENDING)
-  approvedByUserId     String?
-  declineReason        String?
-  paymentTransactionId String?        @unique
-  expiresAt            DateTime?
-  processedAt          DateTime?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-
-  booking            Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  requestedByUser    User                @relation("OvertimeRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
-  approvedByUser     User?               @relation("OvertimeApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
-
-  @@index([bookingId, status])
-  @@index([requestedByUserId, status])
-  @@index([status, createdAt])
-  @@map("overtime_requests")
 }

@@ -3,7 +3,6 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -13,20 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateNested,
 } from 'class-validator';
-
-export class BookingRecurrenceRequestDto {
-  @ApiProperty({ example: true })
-  @IsBoolean()
-  weekly: boolean;
-
-  @ApiProperty({ example: 4, minimum: 2, maximum: 12 })
-  @IsInt()
-  @Min(2)
-  @Max(12)
-  occurrences: number;
-}
 
 export class BookingCreateRequestDto {
   @ApiProperty({ example: 'court-id' })
@@ -61,42 +47,6 @@ export class BookingCreateRequestDto {
       : value
   )
   inviteEmails?: string[];
-
-  @ApiPropertyOptional({ type: BookingRecurrenceRequestDto })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => BookingRecurrenceRequestDto)
-  recurrence?: BookingRecurrenceRequestDto;
-}
-
-export class BookingCheckoutCreateRequestDto {
-  @ApiProperty({ example: 'court-id' })
-  @IsString()
-  @IsNotEmpty()
-  courtId: string;
-
-  @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
-  @IsString()
-  startAt: string;
-
-  @ApiProperty({ example: '2026-03-20T17:00:00.000Z' })
-  @IsString()
-  endAt: string;
-
-  @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(20)
-  @IsString({ each: true })
-  @IsNotEmpty({ each: true })
-  participantUserIds?: string[];
-}
-
-export class BookingMockPaymentConfirmRequestDto {
-  @ApiPropertyOptional({ example: false, default: false })
-  @IsOptional()
-  @IsBoolean()
-  applyToSeries?: boolean;
 }
 
 export class BookingCancelRequestDto {
@@ -121,6 +71,29 @@ export class BookingRescheduleRequestDto {
   @ApiProperty({ example: '2026-03-21T19:00:00.000Z' })
   @IsString()
   endAt: string;
+}
+
+export class BookingCheckoutCreateRequestDto {
+  @ApiProperty({ example: 'court-id' })
+  @IsString()
+  @IsNotEmpty()
+  courtId: string;
+
+  @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
+  @IsString()
+  startAt: string;
+
+  @ApiProperty({ example: '2026-03-20T17:00:00.000Z' })
+  @IsString()
+  endAt: string;
+
+  @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  participantUserIds?: string[];
 }
 
 export class BookingInviteRequestDto {
@@ -171,27 +144,6 @@ export class BookingCheckInRequestDto {
   @IsOptional()
   @IsString()
   token?: string;
-}
-
-export class OpenGameCreateRequestDto {
-  @ApiPropertyOptional({ example: 'Falta 1 jogador' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  title?: string;
-
-  @ApiPropertyOptional({ example: 'Jogo amigável nível intermediário.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  description?: string;
-
-  @ApiPropertyOptional({ example: 4, minimum: 2, maximum: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(2)
-  @Max(20)
-  slotsTotal?: number;
 }
 
 export class CourtRatingCreateRequestDto {
@@ -266,62 +218,6 @@ export class BookingMeQueryRequestDto {
   pageSize?: number;
 
   @ApiPropertyOptional({ example: 'CONFIRMED' })
-  @IsOptional()
-  @IsString()
-  status?: string;
-}
-
-export class OpenGamesListQueryRequestDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({ example: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  pageSize?: number;
-
-  @ApiPropertyOptional({ example: 'OPEN' })
-  @IsOptional()
-  @IsString()
-  status?: string;
-}
-
-export class OvertimeRequestCreateDto {
-  @ApiProperty({ example: 1, enum: [1, 2] })
-  @IsInt()
-  @Min(1)
-  @Max(2)
-  blocks: number;
-}
-
-export class OvertimeAdminDeclineRequestDto {
-  @ApiPropertyOptional({ example: 'Court unavailable for extension window.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  reason?: string;
-}
-
-export class OvertimeAdminListQueryRequestDto {
-  @ApiPropertyOptional({ example: 1, default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({ example: 20, default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  pageSize?: number;
-
-  @ApiPropertyOptional({ example: 'PENDING' })
   @IsOptional()
   @IsString()
   status?: string;
