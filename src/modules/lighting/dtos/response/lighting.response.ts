@@ -7,9 +7,9 @@ export class LightingConfigResponseDto {
   @Expose()
   courtId: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [String] })
   @Expose()
-  lightingDeviceId: string | null;
+  lightingDeviceId: string[];
 
   @ApiProperty()
   @Expose()
@@ -71,9 +71,9 @@ export class LightingDeviceStatusResponseDto {
   @Expose()
   courtId: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [String] })
   @Expose()
-  lightingDeviceId: string | null;
+  lightingDeviceId: string[];
 
   @ApiProperty()
   @Expose()

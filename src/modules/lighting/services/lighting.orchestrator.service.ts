@@ -75,7 +75,7 @@ export class LightingOrchestratorService {
         continue;
       }
 
-      if (!court.lightingDeviceId) {
+      if (!court.lightingDeviceId || court.lightingDeviceId.length === 0) {
         if (
           booking.status === BookingStatus.CONFIRMED &&
           this.lightingPolicyService.hasBookingBeenPaid(
@@ -136,18 +136,20 @@ export class LightingOrchestratorService {
                 reason: 'quiet_hours_hard_block',
               });
             } else {
-              const outcome = await this.dispatchSwitch({
-                courtId: court.id,
-                bookingId: booking.id,
-                deviceId: court.lightingDeviceId,
-                on: true,
-                source: LightingActionSource.SYSTEM,
-                action: LightingActionType.AUTO_ON,
-                reason: 'booking_started',
-              });
+              for (const deviceId of court.lightingDeviceId) {
+                const outcome = await this.dispatchSwitch({
+                  courtId: court.id,
+                  bookingId: booking.id,
+                  deviceId,
+                  on: true,
+                  source: LightingActionSource.SYSTEM,
+                  action: LightingActionType.AUTO_ON,
+                  reason: 'booking_started',
+                });
 
-              if (outcome.success) {
-                processed += 1;
+                if (outcome.success) {
+                  processed += 1;
+                }
               }
             }
           }
@@ -160,18 +162,20 @@ export class LightingOrchestratorService {
           );
 
           if (!hasOff) {
-            const outcome = await this.dispatchSwitch({
-              courtId: court.id,
-              bookingId: booking.id,
-              deviceId: court.lightingDeviceId,
-              on: false,
-              source: LightingActionSource.SYSTEM,
-              action: LightingActionType.AUTO_OFF,
-              reason: 'booking_ended',
-            });
+            for (const deviceId of court.lightingDeviceId) {
+              const outcome = await this.dispatchSwitch({
+                courtId: court.id,
+                bookingId: booking.id,
+                deviceId,
+                on: false,
+                source: LightingActionSource.SYSTEM,
+                action: LightingActionType.AUTO_OFF,
+                reason: 'booking_ended',
+              });
 
-            if (outcome.success) {
-              processed += 1;
+              if (outcome.success) {
+                processed += 1;
+              }
             }
           }
         }
@@ -186,18 +190,20 @@ export class LightingOrchestratorService {
         );
 
         if (!hasOff) {
-          const outcome = await this.dispatchSwitch({
-            courtId: court.id,
-            bookingId: booking.id,
-            deviceId: court.lightingDeviceId,
-            on: false,
-            source: LightingActionSource.SYSTEM,
-            action: LightingActionType.AUTO_OFF,
-            reason: `booking_terminal_status_${booking.status.toLowerCase()}`,
-          });
+          for (const deviceId of court.lightingDeviceId) {
+            const outcome = await this.dispatchSwitch({
+              courtId: court.id,
+              bookingId: booking.id,
+              deviceId,
+              on: false,
+              source: LightingActionSource.SYSTEM,
+              action: LightingActionType.AUTO_OFF,
+              reason: `booking_terminal_status_${booking.status.toLowerCase()}`,
+            });
 
-          if (outcome.success) {
-            processed += 1;
+            if (outcome.success) {
+              processed += 1;
+            }
           }
         }
       }
@@ -226,6 +232,7 @@ export class LightingOrchestratorService {
       !court.hasLighting ||
       !court.lightingEnabled ||
       !court.lightingDeviceId ||
+      court.lightingDeviceId.length === 0 ||
       booking.status !== BookingStatus.CANCELLED
     ) {
       return;
@@ -240,16 +247,18 @@ export class LightingOrchestratorService {
       return;
     }
 
-    await this.dispatchSwitch({
-      courtId: court.id,
-      bookingId: booking.id,
-      deviceId: court.lightingDeviceId,
-      on: false,
-      source: LightingActionSource.SYSTEM,
-      action: LightingActionType.AUTO_OFF,
-      reason: 'booking_cancelled_during_session',
-      requestedByUserId,
-    });
+    for (const deviceId of court.lightingDeviceId) {
+      await this.dispatchSwitch({
+        courtId: court.id,
+        bookingId: booking.id,
+        deviceId,
+        on: false,
+        source: LightingActionSource.SYSTEM,
+        action: LightingActionType.AUTO_OFF,
+        reason: 'booking_cancelled_during_session',
+        requestedByUserId,
+      });
+    }
   }
 
   async manualOverride(
@@ -276,26 +285,32 @@ export class LightingOrchestratorService {
       );
     }
 
-    if (!court.lightingDeviceId) {
-      throw new HttpException(
-        'lighting.error.courtDeviceNotMapped',
-        HttpStatus.BAD_REQUEST
-      );
+    const results: LightingCommandDispatchResponseDto[] = [];
+    for (const deviceId of court.lightingDeviceId) {
+      const res = await this.dispatchSwitch({
+        courtId,
+        bookingId: null,
+        deviceId,
+        on: action === 'ON',
+        source: LightingActionSource.ADMIN,
+        action:
+          action === 'ON'
+            ? LightingActionType.MANUAL_ON
+            : LightingActionType.MANUAL_OFF,
+        reason: reason.trim(),
+        requestedByUserId: adminUserId,
+      });
+      results.push(res);
     }
 
-    return this.dispatchSwitch({
+    const allSuccess = results.every(r => r.success);
+    return {
+      success: allSuccess,
       courtId,
       bookingId: null,
-      deviceId: court.lightingDeviceId,
-      on: action === 'ON',
-      source: LightingActionSource.ADMIN,
-      action:
-        action === 'ON'
-          ? LightingActionType.MANUAL_ON
-          : LightingActionType.MANUAL_OFF,
-      reason: reason.trim(),
-      requestedByUserId: adminUserId,
-    });
+      error: allSuccess ? null : 'Some devices failed to toggle',
+      details: results,
+    };
   }
 
   async sendManualCommands(
@@ -315,7 +330,7 @@ export class LightingOrchestratorService {
       throw new HttpException('court.error.notFound', HttpStatus.NOT_FOUND);
     }
 
-    if (!court.lightingDeviceId) {
+    if (!court.lightingDeviceId || court.lightingDeviceId.length === 0) {
       throw new HttpException(
         'lighting.error.courtDeviceNotMapped',
         HttpStatus.BAD_REQUEST
@@ -389,102 +404,94 @@ export class LightingOrchestratorService {
       return command;
     });
 
-    try {
-      const result = await this.tuyaClientService.sendDeviceCommand(
-        court.lightingDeviceId,
-        normalizedCommands
-      );
+    const results = [];
+    for (const deviceId of court.lightingDeviceId) {
+      try {
+        const result = await this.tuyaClientService.sendDeviceCommand(
+          deviceId,
+          normalizedCommands
+        );
 
-      await this.databaseService.lightingDeviceState.upsert({
-        where: {
-          courtId,
-        },
-        create: {
-          courtId,
-          isOnline: true,
-          lastCommandAt: new Date(),
-          lastCommandAction: LightingActionType.TEST_SWITCH,
-          lastCommandSuccess: true,
-          lastError: null,
-        },
-        update: {
-          isOnline: true,
-          lastCommandAt: new Date(),
-          lastCommandAction: LightingActionType.TEST_SWITCH,
-          lastCommandSuccess: true,
-          lastError: null,
-        },
-      });
+        await this.databaseService.lightingDeviceState.upsert({
+          where: {
+            deviceId,
+          },
+          create: {
+            courtId,
+            deviceId,
+            isOnline: true,
+            lastCommandAt: new Date(),
+            lastCommandAction: LightingActionType.TEST_SWITCH,
+            lastCommandSuccess: true,
+            lastError: null,
+          },
+          update: {
+            isOnline: true,
+            lastCommandAt: new Date(),
+            lastCommandAction: LightingActionType.TEST_SWITCH,
+            lastCommandSuccess: true,
+            lastError: null,
+          },
+        });
 
-      await this.logAction({
-        courtId,
-        bookingId: null,
-        source: LightingActionSource.ADMIN,
-        action: LightingActionType.TEST_SWITCH,
-        success: true,
-        attempts: 1,
-        reason: reason?.trim() || 'manual_command_dispatch',
-        requestedByUserId: adminUserId,
-      });
+        results.push({ deviceId, success: true, result });
+      } catch (error: any) {
+        const message = error?.message || 'lighting.error.tuyaApi';
 
-      return {
-        success: true,
-        courtId,
-        bookingId: null,
-        error: null,
-        details: result,
-      };
-    } catch (error: any) {
-      const message = error?.message || 'lighting.error.tuyaApi';
+        await this.databaseService.lightingDeviceState.upsert({
+          where: {
+            deviceId,
+          },
+          create: {
+            courtId,
+            deviceId,
+            isOnline: false,
+            lastCommandAt: new Date(),
+            lastCommandAction: LightingActionType.TEST_SWITCH,
+            lastCommandSuccess: false,
+            lastError: message,
+          },
+          update: {
+            isOnline: false,
+            lastCommandAt: new Date(),
+            lastCommandAction: LightingActionType.TEST_SWITCH,
+            lastCommandSuccess: false,
+            lastError: message,
+          },
+        });
 
-      await this.databaseService.lightingDeviceState.upsert({
-        where: {
-          courtId,
-        },
-        create: {
-          courtId,
-          isOnline: false,
-          lastCommandAt: new Date(),
-          lastCommandAction: LightingActionType.TEST_SWITCH,
-          lastCommandSuccess: false,
-          lastError: message,
-        },
-        update: {
-          isOnline: false,
-          lastCommandAt: new Date(),
-          lastCommandAction: LightingActionType.TEST_SWITCH,
-          lastCommandSuccess: false,
-          lastError: message,
-        },
-      });
+        results.push({ deviceId, success: false, error: message });
+      }
+    }
 
-      await this.logAction({
-        courtId,
-        bookingId: null,
-        source: LightingActionSource.ADMIN,
-        action: LightingActionType.TEST_SWITCH,
-        success: false,
-        attempts: 1,
-        errorCode: 'manual_command_error',
-        errorMessage: message,
-        reason: reason?.trim() || 'manual_command_dispatch',
-        requestedByUserId: adminUserId,
-      });
+    const allSuccess = results.every(r => r.success);
 
+    await this.logAction({
+      courtId,
+      bookingId: null,
+      source: LightingActionSource.ADMIN,
+      action: LightingActionType.TEST_SWITCH,
+      success: allSuccess,
+      attempts: 1,
+      reason: reason?.trim() || 'manual_command_dispatch',
+      requestedByUserId: adminUserId,
+    });
+
+    if (!allSuccess) {
       await this.notifyAdminsIncident(
         courtId,
         'Lighting manual command failed',
-        `Manual command failed for court ${courtId}: ${message}`
+        `Manual command failed for some devices on court ${courtId}`
       );
-
-      return {
-        success: false,
-        courtId,
-        bookingId: null,
-        error: message,
-        details: null,
-      };
     }
+
+    return {
+      success: allSuccess,
+      courtId,
+      bookingId: null,
+      error: allSuccess ? null : 'One or more devices failed',
+      details: results,
+    };
   }
 
   async getCourtDeviceStatus(
@@ -502,25 +509,36 @@ export class LightingOrchestratorService {
       throw new HttpException('court.error.notFound', HttpStatus.NOT_FOUND);
     }
 
-    if (refresh && court.lightingDeviceId) {
-      await this.syncSingleDeviceState(courtId, court.lightingDeviceId);
+    if (refresh && court.lightingDeviceId && court.lightingDeviceId.length > 0) {
+      for (const deviceId of court.lightingDeviceId) {
+        await this.syncSingleDeviceState(courtId, deviceId);
+      }
     }
 
-    const state = await this.databaseService.lightingDeviceState.findUnique({
+    const states = await this.databaseService.lightingDeviceState.findMany({
       where: {
         courtId,
       },
     });
 
+    const isAnyOnline = states.some(s => s.isOnline);
+    const allOnline =
+      states.length > 0 &&
+      states.length === court.lightingDeviceId.length &&
+      states.every(s => s.isOnline);
+
+    // Pick the most recent/relevant state to show in the summary if needed,
+    // or return a combined DTO. For now, we adjust LightingDeviceStatusResponseDto
+    // to reflect if the group is online.
     return {
       courtId,
-      lightingDeviceId: court.lightingDeviceId ?? null,
-      isOnline: state?.isOnline ?? false,
-      lastPingAt: state?.lastPingAt ?? null,
-      lastCommandAction: state?.lastCommandAction ?? null,
-      lastCommandAt: state?.lastCommandAt ?? null,
-      lastCommandSuccess: state?.lastCommandSuccess ?? null,
-      lastError: state?.lastError ?? null,
+      lightingDeviceId: court.lightingDeviceId,
+      isOnline: isAnyOnline, // At least one is online? Or all? User preference usually "at least one" for basic status
+      lastPingAt: states[0]?.lastPingAt ?? null,
+      lastCommandAction: states[0]?.lastCommandAction ?? null,
+      lastCommandAt: states[0]?.lastCommandAt ?? null,
+      lastCommandSuccess: states[0]?.lastCommandSuccess ?? null,
+      lastError: states.find(s => s.lastError)?.lastError ?? null,
     };
   }
 
@@ -531,7 +549,7 @@ export class LightingOrchestratorService {
         hasLighting: true,
         lightingEnabled: true,
         lightingDeviceId: {
-          not: null,
+          isEmpty: false,
         },
       },
       select: {
@@ -543,12 +561,10 @@ export class LightingOrchestratorService {
     let synced = 0;
 
     for (const court of courts) {
-      if (!court.lightingDeviceId) {
-        continue;
+      for (const deviceId of court.lightingDeviceId) {
+        await this.syncSingleDeviceState(court.id, deviceId, true);
+        synced += 1;
       }
-
-      await this.syncSingleDeviceState(court.id, court.lightingDeviceId, true);
-      synced += 1;
     }
 
     return synced;
@@ -595,10 +611,11 @@ export class LightingOrchestratorService {
 
         await this.databaseService.lightingDeviceState.upsert({
           where: {
-            courtId: params.courtId,
+            deviceId: params.deviceId,
           },
           create: {
             courtId: params.courtId,
+            deviceId: params.deviceId,
             isOnline: true,
             lastPingAt: new Date(),
             lastCommandAt: new Date(),
@@ -652,10 +669,11 @@ export class LightingOrchestratorService {
 
     await this.databaseService.lightingDeviceState.upsert({
       where: {
-        courtId: params.courtId,
+        deviceId: params.deviceId,
       },
       create: {
         courtId: params.courtId,
+        deviceId: params.deviceId,
         isOnline: false,
         lastPingAt: new Date(),
         lastCommandAt: new Date(),
@@ -712,7 +730,7 @@ export class LightingOrchestratorService {
   ): Promise<void> {
     const previous = await this.databaseService.lightingDeviceState.findUnique({
       where: {
-        courtId,
+        deviceId,
       },
     });
 
@@ -724,10 +742,11 @@ export class LightingOrchestratorService {
 
       await this.databaseService.lightingDeviceState.upsert({
         where: {
-          courtId,
+          deviceId,
         },
         create: {
           courtId,
+          deviceId,
           isOnline,
           lastPingAt: new Date(),
           lastError: null,
@@ -766,10 +785,11 @@ export class LightingOrchestratorService {
 
       await this.databaseService.lightingDeviceState.upsert({
         where: {
-          courtId,
+          deviceId,
         },
         create: {
           courtId,
+          deviceId,
           isOnline: false,
           lastPingAt: new Date(),
           lastError: message,

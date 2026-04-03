@@ -180,7 +180,7 @@ model Court {
   ratings                 CourtRating[]
   waitlistEntries         WaitlistEntry[]
   lightingActionLogs      LightingActionLog[]
-  lightingDeviceState     LightingDeviceState?
+  lightingDeviceStates    LightingDeviceState[]
 
   @@index([isActive, deletedAt])
   @@map("courts")
@@ -426,7 +426,8 @@ model LightingActionLog {
 
 model LightingDeviceState {
   id                 String              @id @default(uuid())
-  courtId            String              @unique
+  courtId            String
+  deviceId           String              @unique
   isOnline           Boolean             @default(false)
   lastPingAt         DateTime?
   lastCommandAt      DateTime?
@@ -439,5 +440,6 @@ model LightingDeviceState {
   court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
 
   @@index([isOnline, updatedAt])
+  @@index([courtId])
   @@map("lighting_device_states")
 }

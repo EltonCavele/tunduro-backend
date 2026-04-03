@@ -346,6 +346,14 @@ export class CourtService {
         pricePerHour: this.toDecimal(payload.pricePerHour),
         currency: (payload.currency ?? 'MZN').trim().toUpperCase(),
         maxPlayers: payload.maxPlayers ?? 4,
+        lightingDeviceId: payload.lightingDeviceId ?? [],
+        lightingEnabled: payload.lightingEnabled ?? false,
+        lightingOnOffsetMin: payload.lightingOnOffsetMin ?? 0,
+        lightingOffBufferMin: payload.lightingOffBufferMin ?? 5,
+        quietHoursEnabled: payload.quietHoursEnabled ?? true,
+        quietHoursStart: payload.quietHoursStart ?? '22:00',
+        quietHoursEnd: payload.quietHoursEnd ?? '06:00',
+        quietHoursHardBlock: payload.quietHoursHardBlock ?? true,
       },
       include: {
         images: {
@@ -388,6 +396,30 @@ export class CourtService {
           : {}),
         ...(payload.isActive !== undefined
           ? { isActive: payload.isActive }
+          : {}),
+        ...(payload.lightingDeviceId !== undefined
+          ? { lightingDeviceId: payload.lightingDeviceId }
+          : {}),
+        ...(payload.lightingEnabled !== undefined
+          ? { lightingEnabled: payload.lightingEnabled }
+          : {}),
+        ...(payload.lightingOnOffsetMin !== undefined
+          ? { lightingOnOffsetMin: payload.lightingOnOffsetMin }
+          : {}),
+        ...(payload.lightingOffBufferMin !== undefined
+          ? { lightingOffBufferMin: payload.lightingOffBufferMin }
+          : {}),
+        ...(payload.quietHoursEnabled !== undefined
+          ? { quietHoursEnabled: payload.quietHoursEnabled }
+          : {}),
+        ...(payload.quietHoursStart !== undefined
+          ? { quietHoursStart: payload.quietHoursStart }
+          : {}),
+        ...(payload.quietHoursEnd !== undefined
+          ? { quietHoursEnd: payload.quietHoursEnd }
+          : {}),
+        ...(payload.quietHoursHardBlock !== undefined
+          ? { quietHoursHardBlock: payload.quietHoursHardBlock }
           : {}),
       },
       include: {
@@ -681,6 +713,14 @@ export class CourtService {
       currency: court.currency,
       maxPlayers: court.maxPlayers,
       isActive: court.isActive,
+      lightingDeviceId: court.lightingDeviceId || [],
+      lightingEnabled: court.lightingEnabled || false,
+      lightingOnOffsetMin: court.lightingOnOffsetMin || 0,
+      lightingOffBufferMin: court.lightingOffBufferMin || 0,
+      quietHoursEnabled: court.quietHoursEnabled || false,
+      quietHoursStart: court.quietHoursStart || '',
+      quietHoursEnd: court.quietHoursEnd || '',
+      quietHoursHardBlock: court.quietHoursHardBlock || false,
       ratingAverage: Number((rating?.average ?? 0).toFixed(2)),
       ratingCount: rating?.count ?? 0,
       images: (court.images ?? []).map((image: any) => ({

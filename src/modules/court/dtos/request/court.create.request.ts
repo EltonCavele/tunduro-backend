@@ -60,6 +60,47 @@ export class CourtCreateRequestDto {
   @Min(1)
   @Max(20)
   maxPlayers?: number;
+
+  @ApiPropertyOptional({ type: [String], example: ['device-1', 'device-2', 'device-3'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  lightingDeviceId?: string[];
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  lightingEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsNumber()
+  lightingOnOffsetMin?: number;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @IsNumber()
+  lightingOffBufferMin?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  quietHoursEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: '22:00' })
+  @IsOptional()
+  @IsString()
+  quietHoursStart?: string;
+
+  @ApiPropertyOptional({ example: '06:00' })
+  @IsOptional()
+  @IsString()
+  quietHoursEnd?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  quietHoursHardBlock?: boolean;
 }
 
 export class CourtUpdateRequestDto {
@@ -118,6 +159,47 @@ export class CourtUpdateRequestDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [String], example: ['device-1', 'device-2', 'device-3'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  lightingDeviceId?: string[];
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  lightingEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsNumber()
+  lightingOnOffsetMin?: number;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @IsNumber()
+  lightingOffBufferMin?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  quietHoursEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: '22:00' })
+  @IsOptional()
+  @IsString()
+  quietHoursStart?: string;
+
+  @ApiPropertyOptional({ example: '06:00' })
+  @IsOptional()
+  @IsString()
+  quietHoursEnd?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  quietHoursHardBlock?: boolean;
 }
 
 export class CourtListQueryRequestDto {

@@ -70,6 +70,38 @@ export class CourtResponseDto {
   @Type(() => CourtImageResponseDto)
   images: CourtImageResponseDto[];
 
+  @ApiProperty({ type: [String] })
+  @Expose()
+  lightingDeviceId: string[];
+
+  @ApiProperty()
+  @Expose()
+  lightingEnabled: boolean;
+
+  @ApiProperty()
+  @Expose()
+  lightingOnOffsetMin: number;
+
+  @ApiProperty()
+  @Expose()
+  lightingOffBufferMin: number;
+
+  @ApiProperty()
+  @Expose()
+  quietHoursEnabled: boolean;
+
+  @ApiProperty()
+  @Expose()
+  quietHoursStart: string;
+
+  @ApiProperty()
+  @Expose()
+  quietHoursEnd: string;
+
+  @ApiProperty()
+  @Expose()
+  quietHoursHardBlock: boolean;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;
