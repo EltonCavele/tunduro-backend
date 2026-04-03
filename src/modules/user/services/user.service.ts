@@ -5,9 +5,11 @@ import { DatabaseService } from 'src/common/database/services/database.service';
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 
+import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import {
+  UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
   UserNotificationPreferencesResponseDto,
   UserUpdateProfileResponseDto,
@@ -114,6 +116,25 @@ export class UserService implements IUserService {
     });
 
     return this.getPreferencesFromUser(updatedUser);
+  }
+
+  async updateExpoPushToken(
+    userId: string,
+    data: UserExpoPushTokenUpdateDto
+  ): Promise<UserExpoPushTokenResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+
+    const updated = await this.databaseService.user.update({
+      where: { id: userId },
+      data: { expoPushToken: data.expoPushToken },
+    });
+
+    return { expoPushToken: updated.expoPushToken as string };
   }
 
   async deleteUser(userId: string): Promise<ApiGenericResponseDto> {

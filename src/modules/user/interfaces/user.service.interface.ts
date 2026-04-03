@@ -1,9 +1,11 @@
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 
+import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import {
+  UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
   UserNotificationPreferencesResponseDto,
   UserUpdateProfileResponseDto,
@@ -23,6 +25,10 @@ export interface IUserService {
   ): Promise<UserNotificationPreferencesResponseDto>;
   deleteUser(userId: string): Promise<ApiGenericResponseDto>;
   getProfile(userId: string): Promise<UserGetProfileResponseDto>;
+  updateExpoPushToken(
+    userId: string,
+    data: UserExpoPushTokenUpdateDto
+  ): Promise<UserExpoPushTokenResponseDto>;
   getListOfUsers(
     userId: string,
     q?: string,

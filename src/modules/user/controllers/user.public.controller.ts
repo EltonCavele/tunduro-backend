@@ -10,10 +10,12 @@ import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import {
+  UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
   UserNotificationPreferencesResponseDto,
   UserUpdateProfileResponseDto,
 } from '../dtos/response/user.response';
+import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserService } from '../services/user.service';
 
 @ApiTags('public.user')
@@ -112,5 +114,20 @@ export class UserPublicController {
     @Body() payload: UserNotificationPreferencesUpdateDto
   ): Promise<UserNotificationPreferencesResponseDto> {
     return this.userService.updateNotificationPreferences(user.userId, payload);
+  }
+
+  @Put('expo-push-token')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Register Expo push token for the logged-in user' })
+  @DocResponse({
+    serialization: UserExpoPushTokenResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.expoPushTokenUpdated',
+  })
+  public async updateExpoPushToken(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: UserExpoPushTokenUpdateDto
+  ): Promise<UserExpoPushTokenResponseDto> {
+    return this.userService.updateExpoPushToken(user.userId, payload);
   }
 }

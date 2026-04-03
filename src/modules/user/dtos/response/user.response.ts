@@ -197,3 +197,13 @@ export class UserNotificationPreferencesResponseDto {
   @IsBoolean()
   notifyEmail: boolean;
 }
+
+export class UserExpoPushTokenResponseDto {
+  @ApiProperty({
+    example: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+    description: 'Registered Expo push token',
+  })
+  @Expose()
+  @IsString()
+  expoPushToken: string;
+}
