@@ -57,14 +57,6 @@ export class CourtResponseDto {
   @Expose()
   isActive: boolean;
 
-  @ApiProperty({ example: 4.5 })
-  @Expose()
-  ratingAverage: number;
-
-  @ApiProperty({ example: 10 })
-  @Expose()
-  ratingCount: number;
-
   @ApiProperty({ type: [CourtImageResponseDto] })
   @Expose()
   @Type(() => CourtImageResponseDto)
@@ -137,22 +129,4 @@ export class CourtBookingAdminResponseDto extends CourtBookingPublicResponseDto 
   @ApiProperty({ type: [String] })
   @Expose()
   participantIds: string[];
-}
-
-export class CourtGalleryPresignResponseDto {
-  @ApiProperty()
-  @Expose()
-  uploadUrl: string;
-
-  @ApiProperty()
-  @Expose()
-  fileUrl: string;
-
-  @ApiProperty()
-  @Expose()
-  key: string;
-
-  @ApiProperty()
-  @Expose()
-  expiresInSeconds: number;
 }

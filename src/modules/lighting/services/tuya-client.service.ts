@@ -19,6 +19,18 @@ export class TuyaClientService {
     private readonly tuyaAuthService: TuyaAuthService
   ) {}
 
+  async getDeviceStatus(deviceId: string): Promise<any> {
+    return this.request('GET', `/v1.0/devices/${deviceId}/status`);
+  }
+
+  async getDeviceSpecifications(deviceId: string): Promise<any> {
+    return this.request('GET', `/v1.0/devices/${deviceId}/specifications`);
+  }
+
+  async getDevice(deviceId: string): Promise<any> {
+    return this.request('GET', `/v1.0/devices/${deviceId}`);
+  }
+
   async sendDeviceCommand(
     deviceId: string,
     commands: ITuyaCommandPayload[]
@@ -29,13 +41,32 @@ export class TuyaClientService {
   }
 
   async sendSwitch(deviceId: string, on: boolean): Promise<unknown> {
-    return this.sendDeviceCommand(deviceId, [
-      { code: 'switch_1', value: !!on },
-    ]);
+    const status = await this.getDeviceStatus(deviceId);
+    const switchDp = Array.isArray(status)
+      ? status.find(
+          (dp: any) =>
+            dp.code.startsWith('switch') && typeof dp.value === 'boolean'
+        )
+      : null;
+    const code = switchDp ? switchDp.code : 'switch_1';
+    return this.sendDeviceCommand(deviceId, [{ code, value: !!on }]);
   }
 
-  async getDevice(deviceId: string): Promise<any> {
-    return this.request('GET', `/v1.0/devices/${deviceId}`);
+  async sendCommands(
+    deviceId: string,
+    commands: ITuyaCommandPayload[]
+  ): Promise<unknown> {
+    return this.sendDeviceCommand(deviceId, commands);
+  }
+
+  async sendCountdown(deviceId: string, seconds: number): Promise<unknown> {
+    const s = Math.min(86400, Math.max(0, Math.trunc(Number(seconds))));
+    const status = await this.getDeviceStatus(deviceId);
+    const countdownDp = Array.isArray(status)
+      ? status.find((dp: any) => dp.code.startsWith('countdown'))
+      : null;
+    const code = countdownDp ? countdownDp.code : 'countdown_1';
+    return this.sendDeviceCommand(deviceId, [{ code, value: s }]);
   }
 
   private async request(

@@ -6,8 +6,11 @@ import {
   Param,
   Post,
   Put,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 import { DocGenericResponse } from 'src/common/doc/decorators/doc.generic.decorator';
@@ -19,14 +22,9 @@ import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic
 
 import {
   CourtCreateRequestDto,
-  CourtGalleryPresignRequestDto,
-  CourtGalleryUpsertRequestDto,
   CourtUpdateRequestDto,
 } from '../dtos/request/court.create.request';
-import {
-  CourtGalleryPresignResponseDto,
-  CourtResponseDto,
-} from '../dtos/response/court.response';
+import { CourtResponseDto } from '../dtos/response/court.response';
 import { CourtService } from '../services/court.service';
 
 @ApiTags('admin.courts')
@@ -41,21 +39,26 @@ export class CourtAdminController {
   @AllowedRoles([Role.ADMIN])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Create court' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('images', 10))
   @DocResponse({
     serialization: CourtResponseDto,
     httpStatus: HttpStatus.CREATED,
     messageKey: 'court.success.created',
   })
   async createCourt(
-    @Body() payload: CourtCreateRequestDto
+    @Body() payload: CourtCreateRequestDto,
+    @UploadedFiles() files?: Express.Multer.File[]
   ): Promise<CourtResponseDto> {
-    return this.courtService.createCourt(payload);
+    return this.courtService.createCourt(payload, files);
   }
 
   @Put(':id')
   @AllowedRoles([Role.ADMIN])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Update court' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('images', 10))
   @DocResponse({
     serialization: CourtResponseDto,
     httpStatus: HttpStatus.OK,
@@ -63,9 +66,10 @@ export class CourtAdminController {
   })
   async updateCourt(
     @Param('id') courtId: string,
-    @Body() payload: CourtUpdateRequestDto
+    @Body() payload: CourtUpdateRequestDto,
+    @UploadedFiles() files?: Express.Multer.File[]
   ): Promise<CourtResponseDto> {
-    return this.courtService.updateCourt(courtId, payload);
+    return this.courtService.updateCourt(courtId, payload, files);
   }
 
   @Delete(':id')
@@ -81,53 +85,5 @@ export class CourtAdminController {
     @Param('id') courtId: string
   ): Promise<ApiGenericResponseDto> {
     return this.courtService.deleteCourt(courtId, user.userId);
-  }
-
-  @Post(':id/restore')
-  @AllowedRoles([Role.ADMIN])
-  @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Restore soft-deleted court' })
-  @DocGenericResponse({
-    httpStatus: HttpStatus.OK,
-    messageKey: 'court.success.restored',
-  })
-  async restoreCourt(
-    @Param('id') courtId: string
-  ): Promise<ApiGenericResponseDto> {
-    return this.courtService.restoreCourt(courtId);
-  }
-
-  @Post(':id/gallery/presign')
-  @AllowedRoles([Role.ADMIN])
-  @ApiBearerAuth('accessToken')
-  @ApiOperation({
-    summary: 'Create mock S3 presigned URL for court gallery upload',
-  })
-  @DocResponse({
-    serialization: CourtGalleryPresignResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'court.success.galleryPresign',
-  })
-  async createGalleryPresign(
-    @Param('id') courtId: string,
-    @Body() payload: CourtGalleryPresignRequestDto
-  ): Promise<CourtGalleryPresignResponseDto> {
-    return this.courtService.createGalleryPresign(courtId, payload);
-  }
-
-  @Put(':id/gallery')
-  @AllowedRoles([Role.ADMIN])
-  @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Replace court gallery URLs and order' })
-  @DocResponse({
-    serialization: CourtResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'court.success.galleryUpdated',
-  })
-  async replaceGallery(
-    @Param('id') courtId: string,
-    @Body() payload: CourtGalleryUpsertRequestDto
-  ): Promise<CourtResponseDto> {
-    return this.courtService.replaceGallery(courtId, payload);
   }
 }

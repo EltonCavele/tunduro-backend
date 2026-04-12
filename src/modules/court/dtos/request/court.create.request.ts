@@ -8,7 +8,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -61,7 +60,10 @@ export class CourtCreateRequestDto {
   @Max(20)
   maxPlayers?: number;
 
-  @ApiPropertyOptional({ type: [String], example: ['device-1', 'device-2', 'device-3'] })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['device-1', 'device-2', 'device-3'],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -160,7 +162,10 @@ export class CourtUpdateRequestDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ type: [String], example: ['device-1', 'device-2', 'device-3'] })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['device-1', 'device-2', 'device-3'],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -275,36 +280,4 @@ export class CourtBookingsQueryRequestDto {
   @IsOptional()
   @IsString()
   endAt?: string;
-}
-
-export class CourtGalleryPresignRequestDto {
-  @ApiProperty({ example: 'court-1.png' })
-  @IsString()
-  @MaxLength(255)
-  fileName: string;
-
-  @ApiProperty({ example: 'image/png' })
-  @IsString()
-  @MaxLength(100)
-  contentType: string;
-}
-
-export class CourtGalleryItemRequestDto {
-  @ApiProperty({
-    example: 'https://bucket.s3.af-south-1.amazonaws.com/courts/id/file.png',
-  })
-  @IsUrl()
-  url: string;
-
-  @ApiPropertyOptional({ example: 0, default: 0 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  sortOrder?: number;
-}
-
-export class CourtGalleryUpsertRequestDto {
-  @ApiProperty({ type: [CourtGalleryItemRequestDto] })
-  @IsArray()
-  images: CourtGalleryItemRequestDto[];
 }

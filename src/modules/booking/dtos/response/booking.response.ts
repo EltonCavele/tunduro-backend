@@ -2,11 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BookingCheckoutSessionStatus,
   BookingStatus,
-  InvitationStatus,
   ParticipantStatus,
   PaymentStatus,
   PaymentType,
-  WaitlistStatus,
 } from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 
@@ -22,32 +20,6 @@ export class BookingParticipantResponseDto {
   @ApiProperty()
   @Expose()
   isOrganizer: boolean;
-}
-
-export class BookingInvitationResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  token: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  invitedUserId: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  inviteeEmail: string | null;
-
-  @ApiProperty({ enum: InvitationStatus })
-  @Expose()
-  status: InvitationStatus;
-
-  @ApiProperty()
-  @Expose()
-  expiresAt: Date;
 }
 
 export class BookingStatusHistoryResponseDto {
@@ -152,11 +124,6 @@ export class BookingResponseDto {
   @Type(() => BookingParticipantResponseDto)
   participants: BookingParticipantResponseDto[];
 
-  @ApiProperty({ type: [BookingInvitationResponseDto] })
-  @Expose()
-  @Type(() => BookingInvitationResponseDto)
-  invitations: BookingInvitationResponseDto[];
-
   @ApiProperty({ type: [BookingStatusHistoryResponseDto] })
   @Expose()
   @Type(() => BookingStatusHistoryResponseDto)
@@ -227,127 +194,13 @@ export class BookingCheckoutSessionResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
-  paymentMethod: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
   failureReason: string | null;
 
   @ApiPropertyOptional()
   @Expose()
   paidAt: Date | null;
 
-  @ApiPropertyOptional()
-  @Expose()
-  completedAt: Date | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  refundedAt: Date | null;
-
   @ApiProperty()
   @Expose()
   createdAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  updatedAt: Date;
-}
-
-export class WaitlistResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  courtId: string;
-
-  @ApiProperty()
-  @Expose()
-  userId: string;
-
-  @ApiProperty()
-  @Expose()
-  startAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  endAt: Date;
-
-  @ApiProperty({ enum: WaitlistStatus })
-  @Expose()
-  status: WaitlistStatus;
-
-  @ApiProperty()
-  @Expose()
-  position: number;
-
-  @ApiPropertyOptional()
-  @Expose()
-  bookingId: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  offerExpiresAt: Date | null;
-}
-
-export class BookingCheckInQrResponseDto {
-  @ApiProperty()
-  @Expose()
-  bookingId: string;
-
-  @ApiProperty()
-  @Expose()
-  token: string;
-
-  @ApiProperty()
-  @Expose()
-  expiresAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  qrPayload: string;
-}
-
-export class CourtRatingResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  bookingId: string;
-
-  @ApiProperty()
-  @Expose()
-  courtId: string;
-
-  @ApiProperty()
-  @Expose()
-  userId: string;
-
-  @ApiProperty()
-  @Expose()
-  courtScore: number;
-
-  @ApiProperty()
-  @Expose()
-  cleanlinessScore: number;
-
-  @ApiProperty()
-  @Expose()
-  lightingScore: number;
-
-  @ApiPropertyOptional()
-  @Expose()
-  comment: string | null;
-
-  @ApiProperty()
-  @Expose()
-  createdAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  updatedAt: Date;
 }

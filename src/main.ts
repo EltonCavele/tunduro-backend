@@ -6,6 +6,7 @@ import { ExpressAdapter } from '@nestjs/platform-express';
 import { useContainer } from 'class-validator';
 import compression from 'compression';
 import express from 'express';
+import { join } from 'path';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app/app.module';
@@ -31,6 +32,7 @@ async function bootstrap(): Promise<void> {
 
     // Middleware
     app.use(compression());
+    app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
     app.useLogger(logger);
     app.enableCors(config.get('app.cors'));
 
