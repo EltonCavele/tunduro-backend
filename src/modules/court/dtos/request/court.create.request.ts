@@ -13,6 +13,35 @@ import {
   Min,
 } from 'class-validator';
 
+const toBoolean = ({ value }: { value: unknown }): unknown => {
+  if (typeof value === 'boolean' || value === undefined || value === null) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+
+  return value;
+};
+
+const toNumber = ({ value }: { value: unknown }): unknown => {
+  if (typeof value === 'number' || value === undefined || value === null) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (normalized === '') return value;
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+
+  return value;
+};
+
 export class CourtCreateRequestDto {
   @ApiProperty({ example: 'Court A' })
   @IsString()
@@ -31,6 +60,7 @@ export class CourtCreateRequestDto {
   surface: string;
 
   @ApiProperty({ example: true })
+  @Transform(toBoolean)
   @IsBoolean()
   hasLighting: boolean;
 
@@ -42,6 +72,7 @@ export class CourtCreateRequestDto {
   rules?: string | null;
 
   @ApiProperty({ example: 1200 })
+  @Transform(toNumber)
   @IsNumber()
   @Min(0)
   pricePerHour: number;
@@ -55,6 +86,7 @@ export class CourtCreateRequestDto {
 
   @ApiPropertyOptional({ example: 4, default: 4 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   @Min(1)
   @Max(20)
@@ -71,21 +103,25 @@ export class CourtCreateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   lightingEnabled?: boolean;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   lightingOnOffsetMin?: number;
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   lightingOffBufferMin?: number;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   quietHoursEnabled?: boolean;
 
@@ -101,6 +137,7 @@ export class CourtCreateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   quietHoursHardBlock?: boolean;
 }
@@ -127,6 +164,7 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   hasLighting?: boolean;
 
@@ -139,6 +177,7 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: 1300 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   @Min(0)
   pricePerHour?: number;
@@ -152,6 +191,7 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: 6 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   @Min(1)
   @Max(20)
@@ -159,6 +199,7 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isActive?: boolean;
 
@@ -173,21 +214,25 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   lightingEnabled?: boolean;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   lightingOnOffsetMin?: number;
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   lightingOffBufferMin?: number;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   quietHoursEnabled?: boolean;
 
@@ -203,6 +248,7 @@ export class CourtUpdateRequestDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   quietHoursHardBlock?: boolean;
 }

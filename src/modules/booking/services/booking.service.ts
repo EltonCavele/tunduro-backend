@@ -21,6 +21,9 @@ import {
 } from './paysuite.client.service';
 
 import {
+  BookingAdminCancelRequestDto,
+  BookingAdminCreateRequestDto,
+  BookingAdminQueryRequestDto,
   BookingCancelRequestDto,
   BookingCheckInRequestDto,
   BookingCreateRequestDto,
@@ -226,6 +229,170 @@ export class BookingService {
     });
 
     return this.getBookingForUser(user, id);
+  }
+
+  async adminCreateBooking(
+    adminUser: IAuthUser,
+    dto: BookingAdminCreateRequestDto
+  ): Promise<BookingResponseDto> {
+    const user = await this.db.user.findUnique({
+      where: { id: dto.userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+    if (user.suspendedAt) {
+      throw new HttpException('user.error.userSuspended', HttpStatus.FORBIDDEN);
+    }
+
+    const court = await this.courtService.assertCourtIsBookable(dto.courtId);
+    const start = new Date(dto.startAt);
+    const end = new Date(dto.endAt);
+    const duration = Math.round((end.getTime() - start.getTime()) / 60000);
+
+    await this.assertAvailable(court.id, start, end);
+
+    const amount = Number(
+      (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
+    );
+    const isCashPayment = dto.paymentMethod?.toUpperCase() === 'CASH';
+
+    const ref = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+    const booking = await this.db.$transaction(async tx => {
+      const b = await tx.booking.create({
+        data: {
+          courtId: court.id,
+          organizerId: dto.userId,
+          startAt: start,
+          endAt: end,
+          durationMinutes: duration,
+          totalPrice: amount,
+          currency: court.currency,
+          paidAmount: isCashPayment ? amount : 0,
+          status: isCashPayment
+            ? BookingStatus.CONFIRMED
+            : BookingStatus.PENDING,
+          isAdminForced: true,
+          participants: {
+            create: {
+              userId: dto.userId,
+              status: ParticipantStatus.ACCEPTED,
+              isOrganizer: true,
+            },
+          },
+        },
+      });
+
+      await tx.paymentTransaction.create({
+        data: {
+          bookingId: b.id,
+          userId: dto.userId,
+          type: PaymentType.BOOKING,
+          status: isCashPayment ? PaymentStatus.COMPLETED : PaymentStatus.PENDING,
+          amount: amount,
+          currency: court.currency,
+          reference: ref,
+          metadata: isCashPayment
+            ? { method: 'CASH', createdBy: adminUser.userId }
+            : null,
+          processedAt: isCashPayment ? new Date() : null,
+        },
+      });
+
+      return b;
+    });
+
+    const created = await this.db.booking.findUnique({
+      where: { id: booking.id },
+      include: this.inc(),
+    });
+
+    return this.map(created);
+  }
+
+  async adminListBookings(
+    query: BookingAdminQueryRequestDto
+  ): Promise<ApiPaginatedDataDto<BookingResponseDto>> {
+    const page = Math.max(1, query.page || 1);
+    const take = Math.min(100, query.pageSize || 20);
+
+    const where: Prisma.BookingWhereInput = {
+      ...(query.status ? { status: query.status as BookingStatus } : {}),
+      ...(query.courtId ? { courtId: query.courtId } : {}),
+      ...(query.userId ? { organizerId: query.userId } : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.db.booking.count({ where }),
+      this.db.booking.findMany({
+        where,
+        skip: (page - 1) * take,
+        take,
+        orderBy: { startAt: 'desc' },
+        include: this.inc(),
+      }),
+    ]);
+
+    return {
+      items: items.map(b => this.map(b)),
+      metadata: {
+        currentPage: page,
+        itemsPerPage: take,
+        totalItems: total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
+
+  async adminGetBooking(id: string): Promise<BookingResponseDto> {
+    const booking = await this.db.booking.findUnique({
+      where: { id },
+      include: this.inc(),
+    });
+    if (!booking)
+      throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
+
+    return this.map(booking);
+  }
+
+  async adminCancelBooking(
+    admin: IAuthUser,
+    id: string,
+    dto: BookingAdminCancelRequestDto
+  ): Promise<BookingResponseDto> {
+    const b = await this.db.booking.findUnique({ where: { id } });
+    if (!b)
+      throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
+
+    await this.db.booking.update({
+      where: { id },
+      data: {
+        status: BookingStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancellationReason: dto.reason || 'cancelled by admin',
+      },
+    });
+
+    return this.adminGetBooking(id);
+  }
+
+  async adminCheckIn(
+    admin: IAuthUser,
+    id: string
+  ): Promise<BookingResponseDto> {
+    const b = await this.db.booking.findUnique({ where: { id } });
+    if (!b)
+      throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
+    if (b.status !== BookingStatus.CONFIRMED)
+      throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
+
+    await this.db.booking.update({
+      where: { id },
+      data: { checkedInAt: new Date(), checkInByUserId: admin.userId },
+    });
+
+    return this.adminGetBooking(id);
   }
 
   // --- Operations ---

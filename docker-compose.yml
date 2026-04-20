@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tunduro}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -38,28 +38,28 @@ services:
       start_period: 10s
     command: redis-server --appendonly yes
 
-  server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      cache_from:
-        - payment-platform-app:latest
-    container_name: payment-platform-app
-    restart: unless-stopped
-    ports:
-      - '3001:3001'
-    env_file:
-      - .env
-    networks:
-      - app-network
-    volumes:
-      - .:/app
-      - /app/node_modules
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  # server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     cache_from:
+  #       - payment-platform-app:latest
+  #   container_name: payment-platform-app
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3001:3001'
+  #   env_file:
+  #     - .env
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
 
 networks:
   app-network:

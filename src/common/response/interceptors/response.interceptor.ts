@@ -16,6 +16,37 @@ import { MessageService } from 'src/common/message/services/message.service';
 
 import { ApiGenericResponseDto } from '../dtos/response.generic.dto';
 
+const stripUndefinedDeep = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(item => stripUndefinedDeep(item));
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toNumber' in value &&
+    typeof value.toNumber === 'function'
+  ) {
+    return value.toNumber();
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, nested]) => {
+      if (nested !== undefined) {
+        acc[key] = stripUndefinedDeep(nested);
+      }
+
+      return acc;
+    }, {});
+  }
+
+  return value;
+};
+
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   constructor(
@@ -43,23 +74,25 @@ export class ResponseInterceptor implements NestInterceptor {
         let data = responseBody;
 
         if (classSerialization) {
+          const sanitizedResponseBody = stripUndefinedDeep(responseBody);
+
           if (
-            responseBody &&
-            typeof responseBody === 'object' &&
-            'items' in responseBody &&
-            'metadata' in responseBody &&
-            Array.isArray(responseBody.items)
+            sanitizedResponseBody &&
+            typeof sanitizedResponseBody === 'object' &&
+            'items' in sanitizedResponseBody &&
+            'metadata' in sanitizedResponseBody &&
+            Array.isArray(sanitizedResponseBody.items)
           ) {
             data = {
-              ...responseBody,
-              items: responseBody.items.map((item: any) =>
+              ...sanitizedResponseBody,
+              items: sanitizedResponseBody.items.map((item: any) =>
                 plainToInstance(classSerialization, item, {
                   excludeExtraneousValues: true,
                 })
               ),
             };
           } else {
-            data = plainToInstance(classSerialization, responseBody, {
+            data = plainToInstance(classSerialization, sanitizedResponseBody, {
               excludeExtraneousValues: true,
             });
           }

@@ -13,6 +13,31 @@ import {
   Min,
 } from 'class-validator';
 
+export class BookingAdminCreateRequestDto {
+  @ApiProperty({ example: 'user-id' })
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @ApiProperty({ example: 'court-id' })
+  @IsString()
+  @IsNotEmpty()
+  courtId: string;
+
+  @ApiProperty({ example: '2026-03-20T16:00:00.000Z' })
+  @IsString()
+  startAt: string;
+
+  @ApiProperty({ example: '2026-03-20T17:00:00.000Z' })
+  @IsString()
+  endAt: string;
+
+  @ApiPropertyOptional({ example: 'CASH' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+}
+
 export class BookingCreateRequestDto {
   @ApiProperty({ example: 'court-id' })
   @IsString()
@@ -84,3 +109,45 @@ export class BookingMeQueryRequestDto {
   @IsString()
   status?: string;
 }
+
+export class BookingAdminQueryRequestDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+
+  @ApiPropertyOptional({ example: 'CONFIRMED' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ example: 'court-id' })
+  @IsOptional()
+  @IsString()
+  courtId?: string;
+
+  @ApiPropertyOptional({ example: 'user-id' })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export class BookingAdminCancelRequestDto {
+  @ApiPropertyOptional({ example: 'Cancelled by admin.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class BookingAdminCheckInRequestDto {}

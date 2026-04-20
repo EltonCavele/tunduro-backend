@@ -1,6 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingStatus, PaymentStatus, PaymentType } from '@prisma/client';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
+
+const toNumber = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  if (typeof value === 'object' && 'toNumber' in value) {
+    return value.toNumber();
+  }
+  return value;
+};
+
+const toDate = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+};
 
 export class PaymentBookingSummaryResponseDto {
   @ApiProperty()
@@ -17,10 +48,12 @@ export class PaymentBookingSummaryResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   startAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   endAt: Date;
 
   @ApiProperty({ enum: BookingStatus })
@@ -51,6 +84,7 @@ export class PaymentResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   amount: number;
 
   @ApiProperty()
@@ -67,14 +101,17 @@ export class PaymentResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   processedAt: Date | null;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   createdAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   updatedAt: Date;
 
   @ApiProperty({ type: PaymentBookingSummaryResponseDto })

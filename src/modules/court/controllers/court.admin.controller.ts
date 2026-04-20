@@ -9,7 +9,7 @@ import {
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -35,12 +35,26 @@ import { CourtService } from '../services/court.service';
 export class CourtAdminController {
   constructor(private readonly courtService: CourtService) {}
 
+  private getCourtUploadFiles(uploadedFiles?: {
+    images?: Express.Multer.File[];
+    files?: Express.Multer.File[];
+  }): Express.Multer.File[] | undefined {
+    return uploadedFiles?.images?.length
+      ? uploadedFiles.images
+      : uploadedFiles?.files;
+  }
+
   @Post()
   @AllowedRoles([Role.ADMIN])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Create court' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'images', maxCount: 10 },
+      { name: 'files', maxCount: 10 },
+    ])
+  )
   @DocResponse({
     serialization: CourtResponseDto,
     httpStatus: HttpStatus.CREATED,
@@ -48,9 +62,13 @@ export class CourtAdminController {
   })
   async createCourt(
     @Body() payload: CourtCreateRequestDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles()
+    uploadedFiles?: { images?: Express.Multer.File[]; files?: Express.Multer.File[] }
   ): Promise<CourtResponseDto> {
-    return this.courtService.createCourt(payload, files);
+    return this.courtService.createCourt(
+      payload,
+      this.getCourtUploadFiles(uploadedFiles)
+    );
   }
 
   @Put(':id')
@@ -58,7 +76,12 @@ export class CourtAdminController {
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Update court' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'images', maxCount: 10 },
+      { name: 'files', maxCount: 10 },
+    ])
+  )
   @DocResponse({
     serialization: CourtResponseDto,
     httpStatus: HttpStatus.OK,
@@ -67,9 +90,14 @@ export class CourtAdminController {
   async updateCourt(
     @Param('id') courtId: string,
     @Body() payload: CourtUpdateRequestDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles()
+    uploadedFiles?: { images?: Express.Multer.File[]; files?: Express.Multer.File[] }
   ): Promise<CourtResponseDto> {
-    return this.courtService.updateCourt(courtId, payload, files);
+    return this.courtService.updateCourt(
+      courtId,
+      payload,
+      this.getCourtUploadFiles(uploadedFiles)
+    );
   }
 
   @Delete(':id')

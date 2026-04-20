@@ -6,7 +6,38 @@ import {
   PaymentStatus,
   PaymentType,
 } from '@prisma/client';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
+
+const toNumber = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  if (typeof value === 'object' && 'toNumber' in value) {
+    return value.toNumber();
+  }
+  return value;
+};
+
+const toDate = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+};
 
 export class BookingParticipantResponseDto {
   @ApiProperty()
@@ -19,6 +50,7 @@ export class BookingParticipantResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   isOrganizer: boolean;
 }
 
@@ -37,6 +69,7 @@ export class BookingStatusHistoryResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   createdAt: Date;
 }
 
@@ -55,6 +88,7 @@ export class BookingPaymentResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   amount: number;
 
   @ApiProperty()
@@ -67,6 +101,7 @@ export class BookingPaymentResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   processedAt: Date | null;
 }
 
@@ -85,22 +120,27 @@ export class BookingResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   startAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   endAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   durationMinutes: number;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   totalPrice: number;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   paidAmount: number;
 
   @ApiProperty()
@@ -113,10 +153,12 @@ export class BookingResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   paymentDueAt: Date | null;
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   checkedInAt: Date | null;
 
   @ApiProperty({ type: [BookingParticipantResponseDto] })
@@ -136,10 +178,12 @@ export class BookingResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   createdAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   updatedAt: Date;
 }
 
@@ -158,18 +202,22 @@ export class BookingCheckoutSessionResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   startAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   endAt: Date;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   durationMinutes: number;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   amount: number;
 
   @ApiProperty()
@@ -186,6 +234,7 @@ export class BookingCheckoutSessionResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   expiresAt: Date;
 
   @ApiPropertyOptional()
@@ -198,9 +247,11 @@ export class BookingCheckoutSessionResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   paidAt: Date | null;
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   createdAt: Date;
 }

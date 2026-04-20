@@ -34,7 +34,8 @@ async function bootstrap(): Promise<void> {
     app.use(compression());
     app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
     app.useLogger(logger);
-    app.enableCors(config.get('app.cors'));
+    const corsConfig = config.get('app.cors') || { origin: true, credentials: true };
+    app.enableCors({ ...corsConfig, origin: true });
 
     // Global settings
     app.useGlobalPipes(

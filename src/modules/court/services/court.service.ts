@@ -303,10 +303,9 @@ export class CourtService {
             }
           : {}),
       },
-      include: { images: { orderBy: { sortOrder: 'asc' } } },
     });
 
-    return this.toResponse(court);
+    return this.getCourt(court.id);
   }
 
   async updateCourt(
@@ -372,13 +371,12 @@ export class CourtService {
       };
     }
 
-    const updated = await this.databaseService.court.update({
+    await this.databaseService.court.update({
       where: { id: courtId },
       data,
-      include: { images: { orderBy: { sortOrder: 'asc' } } },
     });
 
-    return this.toResponse(updated);
+    return this.getCourt(courtId);
   }
 
   async deleteCourt(

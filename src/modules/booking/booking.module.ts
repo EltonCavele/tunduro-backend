@@ -7,6 +7,7 @@ import { CourtModule } from 'src/modules/court/court.module';
 import { LightingModule } from 'src/modules/lighting/lighting.module';
 
 import { BookingPublicController } from './controllers/booking.public.controller';
+import { BookingAdminController } from './controllers/booking.admin.controller';
 import { PaysuiteClientService } from './services/paysuite.client.service';
 import { BookingService } from './services/booking.service';
 
@@ -18,7 +19,7 @@ import { BookingService } from './services/booking.service';
     LightingModule,
     HttpModule,
   ],
-  controllers: [BookingPublicController],
+  controllers: [BookingPublicController, BookingAdminController],
   providers: [BookingService, PaysuiteClientService],
   exports: [BookingService],
 })

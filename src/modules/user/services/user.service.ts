@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, HttpException } from '@nestjs/common';
-import { $Enums, Prisma } from '@prisma/client';
+import { $Enums, Prisma, Role } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
@@ -160,6 +160,59 @@ export class UserService implements IUserService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async suspendUser(
+    userId: string,
+    suspendedBy: string
+  ): Promise<ApiGenericResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+    if (user.suspendedAt) {
+      throw new HttpException('user.error.alreadySuspended', HttpStatus.CONFLICT);
+    }
+    if (user.role === Role.ADMIN) {
+      throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
+    }
+
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: { suspendedAt: new Date() },
+    });
+
+    return {
+      success: true,
+      message: 'user.success.userSuspended',
+    };
+  }
+
+  async unsuspendUser(
+    userId: string,
+    unsuspendedBy: string
+  ): Promise<ApiGenericResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+    if (!user.suspendedAt) {
+      throw new HttpException('user.error.notSuspended', HttpStatus.CONFLICT);
+    }
+
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: { suspendedAt: null },
+    });
+
+    return {
+      success: true,
+      message: 'user.success.userUnsuspended',
+    };
   }
 
   async getProfile(id: string): Promise<UserGetProfileResponseDto> {

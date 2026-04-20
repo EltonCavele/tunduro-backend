@@ -6,6 +6,7 @@ import { BookingModule } from 'src/modules/booking/booking.module';
 import { CourtModule } from 'src/modules/court/court.module';
 import { LightingModule } from 'src/modules/lighting/lighting.module';
 import { PaymentModule } from 'src/modules/payment/payment.module';
+import { ReportsModule } from 'src/modules/reports/reports.module';
 import { UserModule } from 'src/modules/user/user.module';
 import { WorkerModule } from 'src/workers/worker.module';
 
@@ -28,6 +29,7 @@ import { HealthController } from './controllers/health.controller';
     BookingModule,
     LightingModule,
     PaymentModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
 })

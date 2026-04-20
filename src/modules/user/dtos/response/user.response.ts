@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { ApiHideProperty, ApiProperty } from '@nestjs/swagger';
 import { $Enums } from '@prisma/client';
-import { Exclude, Expose } from 'class-transformer';
+import { Exclude, Expose, Transform } from 'class-transformer';
 import {
   IsArray,
   IsDate,
@@ -13,6 +13,20 @@ import {
   IsUUID,
   IsBoolean,
 } from 'class-validator';
+
+const toDate = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+};
 
 export class UserResponseDto {
   @ApiProperty({
@@ -146,6 +160,7 @@ export class UserResponseDto {
     example: faker.date.past().toISOString(),
   })
   @Expose()
+  @Transform(toDate)
   @IsDate()
   createdAt: Date;
 
@@ -153,6 +168,7 @@ export class UserResponseDto {
     example: faker.date.recent().toISOString(),
   })
   @Expose()
+  @Transform(toDate)
   @IsDate()
   updatedAt: Date;
 
@@ -162,9 +178,21 @@ export class UserResponseDto {
     nullable: true,
   })
   @Expose()
+  @Transform(toDate)
   @IsDate()
   @IsOptional()
   deletedAt: Date | null;
+
+  @ApiProperty({
+    example: faker.date.future().toISOString(),
+    required: false,
+    nullable: true,
+  })
+  @Expose()
+  @Transform(toDate)
+  @IsDate()
+  @IsOptional()
+  suspendedAt: Date | null;
 
   @ApiHideProperty()
   @Exclude()

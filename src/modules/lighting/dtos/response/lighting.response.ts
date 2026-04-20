@@ -1,6 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LightingActionSource, LightingActionType } from '@prisma/client';
-import { Expose } from 'class-transformer';
+import { Expose, Transform } from 'class-transformer';
+
+const toNumber = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  if (typeof value === 'object' && 'toNumber' in value) {
+    return value.toNumber();
+  }
+  return value;
+};
+
+const toDate = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+};
 
 export class LightingConfigResponseDto {
   @ApiProperty()
@@ -21,10 +52,12 @@ export class LightingConfigResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   lightingOnOffsetMin: number;
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   lightingOffBufferMin: number;
 
   @ApiProperty()
@@ -81,6 +114,7 @@ export class LightingDeviceStatusResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   lastPingAt: Date | null;
 
   @ApiPropertyOptional({ enum: LightingActionType })
@@ -89,6 +123,7 @@ export class LightingDeviceStatusResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  @Transform(toDate)
   lastCommandAt: Date | null;
 
   @ApiPropertyOptional()
@@ -135,6 +170,7 @@ export class LightingActionLogResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toNumber)
   attempts: number;
 
   @ApiPropertyOptional()
@@ -147,5 +183,6 @@ export class LightingActionLogResponseDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(toDate)
   createdAt: Date;
 }
