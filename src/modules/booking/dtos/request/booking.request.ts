@@ -1,9 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaymentMethod } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -32,10 +35,36 @@ export class BookingAdminCreateRequestDto {
   @IsString()
   endAt: string;
 
-  @ApiPropertyOptional({ example: 'CASH' })
+  @ApiPropertyOptional({ enum: PaymentMethod, example: PaymentMethod.CASH })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  method?: PaymentMethod;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Se true e method estiver definido, confirma o pagamento de imediato',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmPaymentNow?: boolean;
+}
+
+export class BookingPaymentConfirmRequestDto {
+  @ApiProperty({ enum: PaymentMethod, example: PaymentMethod.MPESA })
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @ApiPropertyOptional({ example: 'M-Pesa ref 123' })
   @IsOptional()
   @IsString()
-  paymentMethod?: string;
+  @MaxLength(200)
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class BookingCreateRequestDto {

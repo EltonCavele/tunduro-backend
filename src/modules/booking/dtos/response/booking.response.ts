@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  BookingCheckoutSessionStatus,
   BookingStatus,
   ParticipantStatus,
+  PaymentMethod,
   PaymentStatus,
   PaymentType,
 } from '@prisma/client';
@@ -19,8 +19,8 @@ const toNumber = ({ value }: { value: unknown }): unknown => {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? value : parsed;
   }
-  if (typeof value === 'object' && 'toNumber' in value) {
-    return value.toNumber();
+  if (typeof value === 'object' && value !== null && 'toNumber' in value) {
+    return (value as { toNumber: () => number }).toNumber();
   }
   return value;
 };
@@ -98,6 +98,14 @@ export class BookingPaymentResponseDto {
   @ApiProperty()
   @Expose()
   reference: string;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @Expose()
+  method: PaymentMethod | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  confirmedByUserId: string | null;
 
   @ApiPropertyOptional()
   @Expose()
@@ -185,73 +193,4 @@ export class BookingResponseDto {
   @Expose()
   @Transform(toDate)
   updatedAt: Date;
-}
-
-export class BookingCheckoutSessionResponseDto {
-  @ApiProperty()
-  @Expose()
-  id: string;
-
-  @ApiProperty()
-  @Expose()
-  courtId: string;
-
-  @ApiPropertyOptional()
-  @Expose()
-  bookingId: string | null;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toDate)
-  startAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toDate)
-  endAt: Date;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toNumber)
-  durationMinutes: number;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toNumber)
-  amount: number;
-
-  @ApiProperty()
-  @Expose()
-  currency: string;
-
-  @ApiProperty()
-  @Expose()
-  reference: string;
-
-  @ApiProperty({ enum: BookingCheckoutSessionStatus })
-  @Expose()
-  status: BookingCheckoutSessionStatus;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toDate)
-  expiresAt: Date;
-
-  @ApiPropertyOptional()
-  @Expose()
-  checkoutUrl: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  failureReason: string | null;
-
-  @ApiPropertyOptional()
-  @Expose()
-  @Transform(toDate)
-  paidAt: Date | null;
-
-  @ApiProperty()
-  @Expose()
-  @Transform(toDate)
-  createdAt: Date;
 }

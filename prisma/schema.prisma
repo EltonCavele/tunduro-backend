@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   USER
   ADMIN
+  EMPLOYEE
   TRAINER
 }
 
@@ -51,14 +52,11 @@ enum PaymentType {
   OVERTIME_ADJUSTMENT
 }
 
-enum BookingCheckoutSessionStatus {
-  OPEN
-  PAYMENT_FAILED
-  FINALIZING
-  COMPLETED
-  EXPIRED
-  REFUND_PENDING
-  REFUNDED
+enum PaymentMethod {
+  MPESA
+  EMOLA
+  CASH
+  CARD
 }
 
 enum InvitationStatus {
@@ -135,7 +133,7 @@ model User {
   bookingStatusChanges    BookingStatusHistory[]   @relation("BookingStatusChangedBy")
   checkInBookings         Booking[]                @relation("CheckInByUser")
   lightingActions         LightingActionLog[]      @relation("LightingActionRequestedBy")
-  bookingCheckoutSessions BookingCheckoutSession[]
+  confirmedPayments       PaymentTransaction[]     @relation("ConfirmedPayments")
 
   @@map("users")
 }
@@ -177,7 +175,6 @@ model Court {
 
   images                  CourtImage[]
   bookings                Booking[]
-  bookingCheckoutSessions BookingCheckoutSession[]
   ratings                 CourtRating[]
   waitlistEntries         WaitlistEntry[]
   lightingActionLogs      LightingActionLog[]
@@ -230,7 +227,6 @@ model Booking {
   invitations        BookingInvitation[]
   statusHistory      BookingStatusHistory[]
   payments           PaymentTransaction[]
-  checkoutSession    BookingCheckoutSession?
   ratings            CourtRating[]
   waitlistEntries    WaitlistEntry[]         @relation("WaitlistBooking")
   lightingActionLogs LightingActionLog[]
@@ -297,63 +293,29 @@ model BookingStatusHistory {
 }
 
 model PaymentTransaction {
-  id          String        @id @default(uuid())
-  bookingId   String
-  userId      String
-  type        PaymentType
-  status      PaymentStatus @default(PENDING)
-  amount      Decimal       @db.Decimal(10, 2)
-  currency    String        @default("MZN")
-  reference   String        @unique
-  metadata    Json?
-  processedAt DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                  String          @id @default(uuid())
+  bookingId           String
+  userId              String
+  type                PaymentType
+  status              PaymentStatus   @default(PENDING)
+  amount              Decimal         @db.Decimal(10, 2)
+  currency            String          @default("MZN")
+  reference           String          @unique
+  method              PaymentMethod?
+  confirmedByUserId   String?
+  metadata            Json?
+  processedAt         DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
+  booking       Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user          User    @relation(fields: [userId], references: [id])
+  confirmedByUser User? @relation("ConfirmedPayments", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
 
   @@index([bookingId, status])
   @@index([userId, type])
+  @@index([confirmedByUserId])
   @@map("payment_transactions")
-}
-
-model BookingCheckoutSession {
-  id                 String                       @id @default(uuid())
-  organizerId        String
-  courtId            String
-  bookingId          String?                      @unique
-  startAt            DateTime
-  endAt              DateTime
-  durationMinutes    Int
-  amount             Decimal                      @db.Decimal(10, 2)
-  currency           String                       @default("MZN")
-  reference          String                       @unique
-  participantUserIds Json?
-  status             BookingCheckoutSessionStatus @default(OPEN)
-  expiresAt          DateTime
-  paysuitePaymentId  String?
-  checkoutUrl        String?
-  paymentMethod      String?
-  refundId           String?
-  failureReason      String?
-  paidAt             DateTime?
-  completedAt        DateTime?
-  refundedAt         DateTime?
-  metadata           Json?
-  createdAt          DateTime                     @default(now())
-  updatedAt          DateTime                     @updatedAt
-
-  organizer User     @relation(fields: [organizerId], references: [id])
-  court     Court    @relation(fields: [courtId], references: [id])
-  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-
-  @@index([courtId, startAt, endAt, status])
-  @@index([organizerId, startAt, status])
-  @@index([status, expiresAt])
-  @@index([paysuitePaymentId])
-  @@index([refundId])
-  @@map("booking_checkout_sessions")
 }
 
 model WaitlistEntry {

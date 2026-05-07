@@ -2,12 +2,10 @@ import {
   Body,
   Controller,
   Get,
-  HttpCode,
   HttpStatus,
   Param,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -22,10 +20,7 @@ import {
   BookingCreateRequestDto,
   BookingMeQueryRequestDto,
 } from '../dtos/request/booking.request';
-import {
-  BookingCheckoutSessionResponseDto,
-  BookingResponseDto,
-} from '../dtos/response/booking.response';
+import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
 
 @ApiTags('public.bookings')
@@ -38,40 +33,18 @@ export class BookingPublicController {
   @Post('/bookings')
   @ApiBearerAuth('accessToken')
   @ApiOperation({
-    summary: 'Iniciar criação de booking (Gera link de pagamento)',
+    summary: 'Criar reserva (PENDING até confirmação de pagamento no painel)',
   })
   @DocResponse({
-    serialization: BookingCheckoutSessionResponseDto,
+    serialization: BookingResponseDto,
     httpStatus: HttpStatus.CREATED,
-    messageKey: 'booking.success.checkoutStarted',
+    messageKey: 'booking.success.created',
   })
   async createBooking(
     @AuthUser() user: IAuthUser,
     @Body() payload: BookingCreateRequestDto
-  ): Promise<BookingCheckoutSessionResponseDto> {
-    return this.bookingService.createBooking(user, payload);
-  }
-
-  @Post('/integrations/paysuite/webhook')
-  @HttpCode(HttpStatus.OK)
-  async handlePaysuiteWebhook(@Req() request: any): Promise<{ received: true }> {
-    await this.bookingService.handlePaysuiteWebhook(request.body, request.body);
-    return { received: true };
-  }
-
-  @Post('/bookings/:id/payments/mock/confirm')
-  @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Manual confirm booking payment' })
-  @DocResponse({
-    serialization: BookingResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'booking.success.paymentConfirmed',
-  })
-  async confirmPayment(
-    @AuthUser() user: IAuthUser,
-    @Param('id') bookingId: string
   ): Promise<BookingResponseDto> {
-    return this.bookingService.confirmBookingPayment(user, bookingId);
+    return this.bookingService.createBooking(user, payload);
   }
 
   @Get('/bookings/me')

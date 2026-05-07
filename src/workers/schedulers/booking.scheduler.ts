@@ -16,10 +16,15 @@ export class BookingScheduler {
   @Cron(CronExpression.EVERY_MINUTE)
   async handleLifecycleTasks() {
     this.logger.debug('Running booking lifecycle tasks...');
-    
+
+    const expired = await this.bookingService.expirePendingBookings();
+    if (expired > 0) {
+      this.logger.log(`Expired ${expired} pending booking(s) (payment timeout).`);
+    }
+
     // Process automatic lighting
     const lightsProcessed = await this.lightingOrchestratorService.processAutomaticLighting();
-    
+
     if (lightsProcessed > 0) {
       this.logger.log(`Automatic lighting: ${lightsProcessed} devices processed.`);
     }

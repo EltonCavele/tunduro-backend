@@ -13,6 +13,7 @@ import {
   BookingAdminCancelRequestDto,
   BookingAdminCreateRequestDto,
   BookingAdminQueryRequestDto,
+  BookingPaymentConfirmRequestDto,
 } from '../dtos/request/booking.request';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
@@ -26,11 +27,12 @@ export class BookingAdminController {
   constructor(private readonly bookingService: BookingService) {}
 
   @Get()
-  @AllowedRoles([Role.ADMIN])
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'List all bookings (admin)' })
   @DocPaginatedResponse({
     serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
     messageKey: 'booking.success.list',
   })
   async listBookings(
@@ -40,7 +42,7 @@ export class BookingAdminController {
   }
 
   @Get(':id')
-  @AllowedRoles([Role.ADMIN])
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Get booking details (admin)' })
   @DocResponse({
@@ -55,7 +57,7 @@ export class BookingAdminController {
   }
 
   @Post()
-  @AllowedRoles([Role.ADMIN])
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Create booking for user (admin)' })
   @DocResponse({
@@ -70,8 +72,25 @@ export class BookingAdminController {
     return this.bookingService.adminCreateBooking(admin, dto);
   }
 
+  @Post(':id/confirm-payment')
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Confirmar pagamento (admin / employee)' })
+  @DocResponse({
+    serialization: BookingResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.paymentConfirmed',
+  })
+  async confirmPayment(
+    @AuthUser() actor: IAuthUser,
+    @Param('id') id: string,
+    @Body() dto: BookingPaymentConfirmRequestDto
+  ): Promise<BookingResponseDto> {
+    return this.bookingService.confirmBookingPayment(actor, id, dto);
+  }
+
   @Post(':id/cancel')
-  @AllowedRoles([Role.ADMIN])
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Cancel booking (admin)' })
   @DocResponse({
@@ -88,7 +107,7 @@ export class BookingAdminController {
   }
 
   @Post(':id/check-in')
-  @AllowedRoles([Role.ADMIN])
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({ summary: 'Check-in booking (admin)' })
   @DocResponse({

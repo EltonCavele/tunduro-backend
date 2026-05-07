@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BookingStatus, PaymentStatus, PaymentType } from '@prisma/client';
+import {
+  BookingStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+} from '@prisma/client';
 import { Expose, Transform, Type } from 'class-transformer';
 
 const toNumber = ({ value }: { value: unknown }): unknown => {
@@ -13,8 +18,8 @@ const toNumber = ({ value }: { value: unknown }): unknown => {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? value : parsed;
   }
-  if (typeof value === 'object' && 'toNumber' in value) {
-    return value.toNumber();
+  if (typeof value === 'object' && value !== null && 'toNumber' in value) {
+    return (value as { toNumber: () => number }).toNumber();
   }
   return value;
 };
@@ -94,6 +99,14 @@ export class PaymentResponseDto {
   @ApiProperty()
   @Expose()
   reference: string;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @Expose()
+  method: PaymentMethod | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  confirmedByUserId: string | null;
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @Expose()

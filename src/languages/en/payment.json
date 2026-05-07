@@ -1,20 +1,12 @@
 {
   "success": {
     "list": "Payments retrieved successfully",
-    "details": "Payment details retrieved successfully"
+    "details": "Payment details retrieved successfully",
+    "confirmed": "Payment confirmed successfully"
   },
   "error": {
     "notFound": "Payment transaction not found",
-    "invalidWebhookPayload": "Invalid PaySuite webhook payload",
-    "invalidWebhookSignature": "Invalid PaySuite webhook signature",
-    "missingProviderPaymentId": "Missing provider payment identifier for this booking",
-    "paysuiteNotConfigured": "PaySuite is not configured",
-    "paysuiteReturnUrlNotConfigured": "PaySuite return URL configuration is missing",
-    "providerUnavailable": "Payment provider is currently unavailable"
-  },
-  "mpesa": {
-    "error": {
-      "default": "Payment provider returned an error"
-    }
+    "alreadyConfirmed": "Payment was already confirmed",
+    "invalidMethod": "Invalid payment method"
   }
 }

@@ -3,12 +3,7 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { extname, join } from 'path';
 
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import {
-  BookingCheckoutSessionStatus,
-  BookingStatus,
-  Court,
-  Prisma,
-} from '@prisma/client';
+import { BookingStatus, Court, Prisma } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
@@ -27,14 +22,24 @@ import {
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'courts');
 
-const BLOCKING_BOOKING_STATUSES: BookingStatus[] = [
-  BookingStatus.PENDING,
-  BookingStatus.CONFIRMED,
-];
-const BLOCKING_CHECKOUT_SESSION_STATUSES: BookingCheckoutSessionStatus[] = [
-  BookingCheckoutSessionStatus.OPEN,
-  BookingCheckoutSessionStatus.FINALIZING,
-];
+/** Bloqueia slot: confirmado, ou pendente com prazo de pagamento ainda válido */
+function blockingBookingOverlapWhere(
+  start: Date,
+  end: Date
+): Prisma.BookingWhereInput {
+  const now = new Date();
+  return {
+    startAt: { lt: end },
+    endAt: { gt: start },
+    OR: [
+      { status: BookingStatus.CONFIRMED },
+      {
+        status: BookingStatus.PENDING,
+        paymentDueAt: { gt: now },
+      },
+    ],
+  };
+}
 
 @Injectable()
 export class CourtService {
@@ -66,11 +71,7 @@ export class CourtService {
         slotFilter = {
           NOT: {
             bookings: {
-              some: {
-                status: { in: BLOCKING_BOOKING_STATUSES },
-                startAt: { lt: end },
-                endAt: { gt: start },
-              },
+              some: blockingBookingOverlapWhere(start, end),
             },
           },
         };
@@ -186,31 +187,16 @@ export class CourtService {
 
     const where: Prisma.BookingWhereInput = { courtId, ...dateFilter };
 
-    const checkoutSessionWhere: Prisma.BookingCheckoutSessionWhereInput = {
-      courtId,
-      status: { in: BLOCKING_CHECKOUT_SESSION_STATUSES },
-      expiresAt: { gt: new Date() },
-      ...dateFilter,
-    };
+    const [bookingCount, bookings] = await Promise.all([
+      this.databaseService.booking.count({ where }),
+      this.databaseService.booking.findMany({
+        where,
+        orderBy: { startAt: 'desc' },
+        include: { participants: { select: { userId: true } } },
+      }),
+    ]);
 
-    const [bookingCount, checkoutSessionCount, bookings, checkoutSessions] =
-      await Promise.all([
-        this.databaseService.booking.count({ where }),
-        this.databaseService.bookingCheckoutSession.count({
-          where: checkoutSessionWhere,
-        }),
-        this.databaseService.booking.findMany({
-          where,
-          orderBy: { startAt: 'desc' },
-          include: { participants: { select: { userId: true } } },
-        }),
-        this.databaseService.bookingCheckoutSession.findMany({
-          where: checkoutSessionWhere,
-          orderBy: { startAt: 'desc' },
-        }),
-      ]);
-
-    const totalItems = bookingCount + checkoutSessionCount;
+    const totalItems = bookingCount;
 
     const items = [
       ...bookings.map(item => {
@@ -229,26 +215,6 @@ export class CourtService {
           status: item.status,
           organizerId: item.organizerId,
           participantIds: item.participants.map(p => p.userId),
-        } as CourtBookingAdminResponseDto;
-      }),
-      ...checkoutSessions.map(item => {
-        if (!isAdmin) {
-          return {
-            id: item.id,
-            startAt: item.startAt,
-            endAt: item.endAt,
-            status: 'PAYMENT_PENDING',
-          } as CourtBookingPublicResponseDto;
-        }
-        return {
-          id: item.id,
-          startAt: item.startAt,
-          endAt: item.endAt,
-          status: 'PAYMENT_PENDING',
-          organizerId: item.organizerId,
-          participantIds: Array.isArray(item.participantUserIds)
-            ? item.participantUserIds.filter(id => typeof id === 'string')
-            : [],
         } as CourtBookingAdminResponseDto;
       }),
     ]

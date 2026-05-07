@@ -1,6 +1,10 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 
+function canViewAllPayments(role: Role): boolean {
+  return role === Role.ADMIN || role === Role.EMPLOYEE;
+}
+
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
@@ -39,7 +43,7 @@ export class PaymentService {
     const skip = (page - 1) * pageSize;
 
     const where: Prisma.PaymentTransactionWhereInput = {
-      ...(user.role === Role.ADMIN ? {} : { userId: user.userId }),
+      ...(canViewAllPayments(user.role) ? {} : { userId: user.userId }),
       ...(query.status ? { status: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
     };
@@ -84,7 +88,7 @@ export class PaymentService {
     const payment = await this.databaseService.paymentTransaction.findFirst({
       where: {
         id: paymentId,
-        ...(user.role === Role.ADMIN ? {} : { userId: user.userId }),
+        ...(canViewAllPayments(user.role) ? {} : { userId: user.userId }),
       },
       include: {
         booking: {
@@ -117,6 +121,8 @@ export class PaymentService {
       amount: Number(payment.amount),
       currency: payment.currency,
       reference: payment.reference,
+      method: payment.method ?? null,
+      confirmedByUserId: payment.confirmedByUserId ?? null,
       metadata: (payment.metadata as Record<string, unknown> | null) ?? null,
       processedAt: payment.processedAt,
       createdAt: payment.createdAt,
