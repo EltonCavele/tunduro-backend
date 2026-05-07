@@ -42,6 +42,36 @@ const toNumber = ({ value }: { value: unknown }): unknown => {
   return value;
 };
 
+const toStringArray = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => `${item}`.trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!normalized) return [];
+
+    if (normalized.startsWith('[') && normalized.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(normalized);
+        if (Array.isArray(parsed)) {
+          return parsed.map(item => `${item}`.trim()).filter(Boolean);
+        }
+      } catch {
+        return value;
+      }
+    }
+
+    return [normalized];
+  }
+
+  return value;
+};
+
 export class CourtCreateRequestDto {
   @ApiProperty({ example: 'Court A' })
   @IsString()
@@ -97,6 +127,7 @@ export class CourtCreateRequestDto {
     example: ['device-1', 'device-2', 'device-3'],
   })
   @IsOptional()
+  @Transform(toStringArray)
   @IsArray()
   @IsString({ each: true })
   lightingDeviceId?: string[];
@@ -208,6 +239,7 @@ export class CourtUpdateRequestDto {
     example: ['device-1', 'device-2', 'device-3'],
   })
   @IsOptional()
+  @Transform(toStringArray)
   @IsArray()
   @IsString({ each: true })
   lightingDeviceId?: string[];
