@@ -9,8 +9,9 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 # Install dependencies with cache mount for faster rebuilds
-RUN --mount=type=cache,target=/root/.yarn \
-    --mount=type=cache,target=/app/.yarn/cache \
+# Some remote builders require an explicit cache id.
+RUN --mount=type=cache,id=yarn-global-cache,target=/root/.yarn \
+    --mount=type=cache,id=yarn-project-cache,target=/app/.yarn/cache \
     yarn install --frozen-lockfile --prefer-offline
 
 # Copy prisma schema and generate client
