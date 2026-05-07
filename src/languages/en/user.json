@@ -1,6 +1,7 @@
 {
   "success": {
     "profile": "User details retrieved successfully",
+    "created": "User created successfully",
     "deleted": "User deleted successfully",
     "updated": "User updated successfully",
     "userDeleted": "User deleted successfully",

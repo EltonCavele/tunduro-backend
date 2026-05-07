@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpStatus, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 
 import { DocPaginatedResponse } from 'src/common/doc/decorators/doc.paginated.decorator';
 import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
@@ -54,7 +55,9 @@ export class UserPublicController {
       limit,
       sortBy,
       sortOrder,
-      gender
+      gender,
+      undefined,
+      [Role.USER]
     );
   }
 

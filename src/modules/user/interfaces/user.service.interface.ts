@@ -1,9 +1,11 @@
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
+import { Role } from '@prisma/client';
 
 import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
+import { UserAdminCreateDto } from '../dtos/request/user.admin-create.request';
 import {
   UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
@@ -12,6 +14,10 @@ import {
 } from '../dtos/response/user.response';
 
 export interface IUserService {
+  createUserByAdmin(
+    adminId: string,
+    data: UserAdminCreateDto
+  ): Promise<UserGetProfileResponseDto>;
   updateUser(
     userId: string,
     data: UserUpdateDto
@@ -38,6 +44,8 @@ export interface IUserService {
     limit?: number,
     sortBy?: string,
     sortOrder?: 'asc' | 'desc',
-    gender?: string
+    gender?: string,
+    role?: string,
+    allowedRoles?: Role[]
   ): Promise<ApiPaginatedDataDto<UserGetProfileResponseDto>>;
 }

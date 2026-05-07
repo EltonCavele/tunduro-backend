@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 const SEED_PREFIX = 'seed-';
 const PASSWORD = 'secret123';
 const ADMIN_EMAIL = 'admin@seed.tunduro.local';
-const EMPLOYEE_EMAIL = 'employee.payments.1@seed.tunduro.local';
+const EMPLOYEE_EMAIL = 'employee@seed.tunduro.local';
 
 const REQUIRED_TABLES = ['users'] as const;
 
