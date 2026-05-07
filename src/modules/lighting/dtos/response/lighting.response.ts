@@ -186,3 +186,61 @@ export class LightingActionLogResponseDto {
   @Transform(toDate)
   createdAt: Date;
 }
+
+export class LightingAdminDeviceActionResponseDto {
+  @ApiProperty()
+  @Expose()
+  success: boolean;
+
+  @ApiProperty({ type: [String] })
+  @Expose()
+  processedDeviceIds: string[];
+
+  @ApiProperty({ type: [String] })
+  @Expose()
+  failedDeviceIds: string[];
+}
+
+export class LightingDeviceStatusItemResponseDto {
+  @ApiProperty()
+  @Expose()
+  code: string;
+
+  @ApiProperty()
+  @Expose()
+  value: unknown;
+}
+
+export class LightingDeviceLiveStatusResponseDto {
+  @ApiProperty()
+  @Expose()
+  deviceId: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  isOn: boolean | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  countdownSeconds: number | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  onlineState: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  current: number | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  power: number | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  voltage: number | null;
+
+  @ApiProperty({ type: [LightingDeviceStatusItemResponseDto] })
+  @Expose()
+  raw: LightingDeviceStatusItemResponseDto[];
+}

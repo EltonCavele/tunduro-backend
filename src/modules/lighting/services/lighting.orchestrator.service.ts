@@ -12,6 +12,98 @@ export class LightingOrchestratorService {
     private readonly tuyaClient: TuyaClientService
   ) {}
 
+  async activateByCheckIn(bookingId: string, actorUserId?: string): Promise<void> {
+    const booking = await this.db.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        court: true,
+      },
+    });
+
+    if (!booking || !booking.court) {
+      this.logger.warn(
+        `activateByCheckIn skipped: booking/court not found (bookingId=${bookingId})`
+      );
+      return;
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      this.logger.warn(
+        `activateByCheckIn skipped: booking is not confirmed (bookingId=${bookingId}, status=${booking.status})`
+      );
+      return;
+    }
+
+    if (
+      !booking.court.hasLighting ||
+      !Array.isArray(booking.court.lightingDeviceId) ||
+      booking.court.lightingDeviceId.length === 0
+    ) {
+      return;
+    }
+
+    const seconds = this.calculateCountdownSeconds(
+      booking.endAt,
+      booking.court.lightingOffBufferMin
+    );
+
+    for (const deviceId of booking.court.lightingDeviceId) {
+      try {
+        await this.tuyaClient.sendSwitch(deviceId, true);
+        await this.tuyaClient.sendCountdown(deviceId, seconds);
+        this.logger.log(
+          `Lighting activated by check-in (bookingId=${bookingId}, courtId=${booking.court.id}, deviceId=${deviceId}, seconds=${seconds}, actorUserId=${actorUserId ?? 'unknown'})`
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to activate lighting by check-in (bookingId=${bookingId}, courtId=${booking.court.id}, deviceId=${deviceId}): ${
+            error?.message ?? 'unknown error'
+          }`
+        );
+      }
+    }
+  }
+
+  async deactivateNow(bookingId: string, reason: string): Promise<void> {
+    const booking = await this.db.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        court: true,
+      },
+    });
+
+    if (!booking || !booking.court) {
+      this.logger.warn(
+        `deactivateNow skipped: booking/court not found (bookingId=${bookingId})`
+      );
+      return;
+    }
+
+    if (
+      !booking.court.hasLighting ||
+      !Array.isArray(booking.court.lightingDeviceId) ||
+      booking.court.lightingDeviceId.length === 0
+    ) {
+      return;
+    }
+
+    for (const deviceId of booking.court.lightingDeviceId) {
+      try {
+        await this.tuyaClient.sendCountdown(deviceId, 0);
+        await this.tuyaClient.sendSwitch(deviceId, false);
+        this.logger.log(
+          `Lighting deactivated immediately (bookingId=${bookingId}, courtId=${booking.court.id}, deviceId=${deviceId}, reason=${reason})`
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to deactivate lighting immediately (bookingId=${bookingId}, courtId=${booking.court.id}, deviceId=${deviceId}, reason=${reason}): ${
+            error?.message ?? 'unknown error'
+          }`
+        );
+      }
+    }
+  }
+
   async processAutomaticLighting(): Promise<number> {
     const now = new Date();
     const twoMinutesAgo = new Date(now.getTime() - 2 * 60000);
@@ -79,5 +171,17 @@ export class LightingOrchestratorService {
     }
 
     return processedCount;
+  }
+
+  private calculateCountdownSeconds(
+    bookingEndAt: Date,
+    offBufferMin?: number | null
+  ): number {
+    const nowMs = Date.now();
+    const endMs = new Date(bookingEndAt).getTime();
+    const remainingSec = Math.max(0, Math.floor((endMs - nowMs) / 1000));
+    const bufferSec = Math.max(0, Math.trunc(Number(offBufferMin ?? 0) * 60));
+    const withBuffer = remainingSec + bufferSec;
+    return Math.max(0, Math.min(86400, withBuffer));
   }
 }

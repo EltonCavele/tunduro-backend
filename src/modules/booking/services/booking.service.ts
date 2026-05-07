@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   BookingStatus,
   ParticipantStatus,
@@ -13,6 +13,7 @@ import { DatabaseService } from 'src/common/database/services/database.service';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 import { CourtService } from 'src/modules/court/services/court.service';
+import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
 
 import {
   BookingAdminCancelRequestDto,
@@ -33,9 +34,12 @@ function isPaymentStaff(role: Role): boolean {
 
 @Injectable()
 export class BookingService {
+  private readonly logger = new Logger(BookingService.name);
+
   constructor(
     private readonly db: DatabaseService,
-    private readonly courtService: CourtService
+    private readonly courtService: CourtService,
+    private readonly lightingOrchestratorService: LightingOrchestratorService
   ) {}
 
   /**
@@ -422,6 +426,21 @@ export class BookingService {
       });
     });
 
+    if (b.checkedInAt) {
+      try {
+        await this.lightingOrchestratorService.deactivateNow(
+          id,
+          'admin_cancel_after_checkin'
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to deactivate lights after admin cancel for booking ${id}: ${
+            error?.message ?? 'unknown error'
+          }`
+        );
+      }
+    }
+
     return this.adminGetBooking(id);
   }
 
@@ -434,11 +453,24 @@ export class BookingService {
       throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
     if (b.status !== BookingStatus.CONFIRMED)
       throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
+    if (b.checkedInAt) {
+      return this.adminGetBooking(id);
+    }
 
     await this.db.booking.update({
       where: { id },
       data: { checkedInAt: new Date(), checkInByUserId: admin.userId },
     });
+
+    try {
+      await this.lightingOrchestratorService.activateByCheckIn(id, admin.userId);
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to activate lights on admin check-in for booking ${id}: ${
+          error?.message ?? 'unknown error'
+        }`
+      );
+    }
 
     return this.adminGetBooking(id);
   }
@@ -472,6 +504,21 @@ export class BookingService {
       });
     });
 
+    if (b.checkedInAt) {
+      try {
+        await this.lightingOrchestratorService.deactivateNow(
+          id,
+          'user_cancel_after_checkin'
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to deactivate lights after user cancel for booking ${id}: ${
+            error?.message ?? 'unknown error'
+          }`
+        );
+      }
+    }
+
     return this.getBookingForUser(user, id);
   }
 
@@ -488,11 +535,24 @@ export class BookingService {
       b.participants.some(p => p.userId === user.userId);
     if (!isMember && user.role !== Role.ADMIN)
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
+    if (b.checkedInAt) {
+      return this.getBookingForUser(user, id);
+    }
 
     await this.db.booking.update({
       where: { id },
       data: { checkedInAt: new Date(), checkInByUserId: user.userId },
     });
+
+    try {
+      await this.lightingOrchestratorService.activateByCheckIn(id, user.userId);
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to activate lights on check-in for booking ${id}: ${
+          error?.message ?? 'unknown error'
+        }`
+      );
+    }
 
     return this.getBookingForUser(user, id);
   }

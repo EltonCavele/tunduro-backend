@@ -2,16 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { BookingService } from 'src/modules/booking/services/booking.service';
-import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
 
 @Injectable()
 export class BookingScheduler {
   private readonly logger = new Logger(BookingScheduler.name);
 
-  constructor(
-    private readonly bookingService: BookingService,
-    private readonly lightingOrchestratorService: LightingOrchestratorService,
-  ) {}
+  constructor(private readonly bookingService: BookingService) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async handleLifecycleTasks() {
@@ -20,13 +16,6 @@ export class BookingScheduler {
     const expired = await this.bookingService.expirePendingBookings();
     if (expired > 0) {
       this.logger.log(`Expired ${expired} pending booking(s) (payment timeout).`);
-    }
-
-    // Process automatic lighting
-    const lightsProcessed = await this.lightingOrchestratorService.processAutomaticLighting();
-
-    if (lightsProcessed > 0) {
-      this.logger.log(`Automatic lighting: ${lightsProcessed} devices processed.`);
     }
   }
 }

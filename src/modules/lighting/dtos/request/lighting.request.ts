@@ -175,6 +175,98 @@ export class LightingTestSwitchRequestDto {
   on?: boolean;
 }
 
+export class LightingAdminSwitchRequestDto {
+  @ApiPropertyOptional({ example: 'court-uuid' })
+  @IsOptional()
+  @IsUUID()
+  courtId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['bf457ca53a6d091a06xw0s', 'bf457ca53a6d091a06xw0t'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.map(item => `${item}`.trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (!normalized) return [];
+      try {
+        const parsed = JSON.parse(normalized);
+        if (Array.isArray(parsed)) {
+          return parsed.map(item => `${item}`.trim()).filter(Boolean);
+        }
+      } catch {
+        return [normalized];
+      }
+      return [normalized];
+    }
+    return value;
+  })
+  deviceIds?: string[];
+
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  on: boolean;
+}
+
+export class LightingAdminCountdownRequestDto {
+  @ApiPropertyOptional({ example: 'court-uuid' })
+  @IsOptional()
+  @IsUUID()
+  courtId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['bf457ca53a6d091a06xw0s', 'bf457ca53a6d091a06xw0t'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.map(item => `${item}`.trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (!normalized) return [];
+      try {
+        const parsed = JSON.parse(normalized);
+        if (Array.isArray(parsed)) {
+          return parsed.map(item => `${item}`.trim()).filter(Boolean);
+        }
+      } catch {
+        return [normalized];
+      }
+      return [normalized];
+    }
+    return value;
+  })
+  deviceIds?: string[];
+
+  @ApiProperty({ example: 900, minimum: 0, maximum: 86400 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(86400)
+  seconds: number;
+}
+
+export class LightingDeviceStatusQueryDto {
+  @ApiProperty({ example: 'bf457ca53a6d091a06xw0s' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  @Transform(({ value }) => `${value}`.trim())
+  deviceId: string;
+}
+
 export const LIGHTING_ALLOWED_COMMAND_CODES = [
   'switch_1',
   'countdown_1',
