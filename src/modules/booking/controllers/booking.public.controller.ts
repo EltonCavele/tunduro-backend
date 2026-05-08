@@ -33,7 +33,8 @@ export class BookingPublicController {
   @Post('/bookings')
   @ApiBearerAuth('accessToken')
   @ApiOperation({
-    summary: 'Criar reserva (PENDING até confirmação de pagamento no painel)',
+    summary:
+      'Criar reserva e iniciar pagamento M-Pesa (PENDING até confirmação do gateway)',
   })
   @DocResponse({
     serialization: BookingResponseDto,

@@ -105,6 +105,22 @@ export class BookingPaymentResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  phone: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  providerTransactionId: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  providerStatusCode: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  providerMessage: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
   confirmedByUserId: string | null;
 
   @ApiPropertyOptional()

@@ -32,7 +32,6 @@
     "conflict": "This time slot is no longer available",
     "pendingPayment": "There is already a pending booking for this slot awaiting payment",
     "invalidStatusForConfirmation": "Booking cannot be confirmed in the current status",
-    "confirmRequiresMethod": "confirmPaymentNow requires a payment method",
     "organizerOverlap": "Organizer has another booking in the same time window",
     "participantOverlap": "Participant has another booking in the same time window",
     "exceedsCourtCapacity": "This booking exceeds the court participant capacity",

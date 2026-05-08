@@ -13,7 +13,6 @@ import {
   BookingAdminCancelRequestDto,
   BookingAdminCreateRequestDto,
   BookingAdminQueryRequestDto,
-  BookingPaymentConfirmRequestDto,
 } from '../dtos/request/booking.request';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
@@ -59,7 +58,9 @@ export class BookingAdminController {
   @Post()
   @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Create booking for user (admin)' })
+  @ApiOperation({
+    summary: 'Criar reserva para utilizador e iniciar pagamento M-Pesa (admin)',
+  })
   @DocResponse({
     serialization: BookingResponseDto,
     httpStatus: HttpStatus.CREATED,
@@ -70,23 +71,6 @@ export class BookingAdminController {
     @Body() dto: BookingAdminCreateRequestDto
   ): Promise<BookingResponseDto> {
     return this.bookingService.adminCreateBooking(admin, dto);
-  }
-
-  @Post(':id/confirm-payment')
-  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
-  @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Confirmar pagamento (admin / employee)' })
-  @DocResponse({
-    serialization: BookingResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'booking.success.paymentConfirmed',
-  })
-  async confirmPayment(
-    @AuthUser() actor: IAuthUser,
-    @Param('id') id: string,
-    @Body() dto: BookingPaymentConfirmRequestDto
-  ): Promise<BookingResponseDto> {
-    return this.bookingService.confirmBookingPayment(actor, id, dto);
   }
 
   @Post(':id/cancel')

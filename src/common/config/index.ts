@@ -2,6 +2,7 @@ import AppConfig from './app.config';
 import AuthConfig from './auth.config';
 import DocConfig from './doc.config';
 import NotificationConfig from './notification.config';
+import PaymentConfig from './payment.config';
 import RedisConfig from './redis.config';
 import TuyaConfig from './tuya.config';
 
@@ -12,4 +13,5 @@ export default [
   NotificationConfig,
   DocConfig,
   TuyaConfig,
+  PaymentConfig,
 ];

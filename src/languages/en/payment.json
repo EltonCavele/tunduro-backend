@@ -2,11 +2,17 @@
   "success": {
     "list": "Payments retrieved successfully",
     "details": "Payment details retrieved successfully",
-    "confirmed": "Payment confirmed successfully"
+    "confirmed": "Payment confirmed successfully",
+    "dispatched": "Payment request dispatched to the gateway"
   },
   "error": {
     "notFound": "Payment transaction not found",
     "alreadyConfirmed": "Payment was already confirmed",
-    "invalidMethod": "Invalid payment method"
+    "invalidMethod": "Invalid payment method",
+    "invalidPhone": "Invalid Mozambican mobile number",
+    "gatewayUnavailable": "Payment gateway is currently unavailable",
+    "declined": "Payment was declined by the gateway",
+    "timeout": "Payment gateway did not respond in time",
+    "unsupportedMethod": "Selected payment method is not supported yet"
   }
 }

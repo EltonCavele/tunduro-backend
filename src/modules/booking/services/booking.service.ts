@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   BookingStatus,
   ParticipantStatus,
+  PaymentMethod,
   PaymentStatus,
   PaymentType,
   Prisma,
@@ -14,6 +16,8 @@ import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 import { CourtService } from 'src/modules/court/services/court.service';
 import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
+import { PaymentQueue } from 'src/modules/payment/queues/payment.queue';
+import { normalizeMozMsisdn } from 'src/modules/payment/utils/phone.util';
 
 import {
   BookingAdminCancelRequestDto,
@@ -22,15 +26,10 @@ import {
   BookingCancelRequestDto,
   BookingCreateRequestDto,
   BookingMeQueryRequestDto,
-  BookingPaymentConfirmRequestDto,
 } from '../dtos/request/booking.request';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 
-const PAYMENT_DEADLINE_MIN = 30;
-
-function isPaymentStaff(role: Role): boolean {
-  return role === Role.ADMIN || role === Role.EMPLOYEE;
-}
+const DEFAULT_PAYMENT_DEADLINE_MIN = 30;
 
 @Injectable()
 export class BookingService {
@@ -39,16 +38,29 @@ export class BookingService {
   constructor(
     private readonly db: DatabaseService,
     private readonly courtService: CourtService,
-    private readonly lightingOrchestratorService: LightingOrchestratorService
+    private readonly lightingOrchestratorService: LightingOrchestratorService,
+    private readonly paymentQueue: PaymentQueue,
+    private readonly configService: ConfigService
   ) {}
 
   /**
-   * Cria reserva em PENDING; pagamento confirmado depois por admin/employee no painel.
+   * Cria reserva PENDING, regista a tentativa de pagamento e enfileira o
+   * débito M-Pesa. O cliente faz polling em GET /bookings/:id para o estado
+   * final (CONFIRMED se o gateway aceitar, CANCELLED se falhar).
    */
   async createBooking(
     user: IAuthUser,
     dto: BookingCreateRequestDto
   ): Promise<BookingResponseDto> {
+    const method = dto.paymentMethod ?? PaymentMethod.MPESA;
+    const msisdn = normalizeMozMsisdn(dto.phone);
+    if (!msisdn) {
+      throw new HttpException(
+        'payment.error.invalidPhone',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
     const court = await this.courtService.assertCourtIsBookable(dto.courtId);
     const start = new Date(dto.startAt);
     const end = new Date(dto.endAt);
@@ -60,9 +72,11 @@ export class BookingService {
       (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
     );
     const ref = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const paymentDueAt = new Date(Date.now() + PAYMENT_DEADLINE_MIN * 60000);
+    const paymentDueAt = new Date(
+      Date.now() + this.getPaymentDeadlineMin() * 60000
+    );
 
-    const booking = await this.db.$transaction(async tx => {
+    const { booking, paymentId } = await this.db.$transaction(async tx => {
       const b = await tx.booking.create({
         data: {
           courtId: court.id,
@@ -90,11 +104,11 @@ export class BookingService {
           bookingId: b.id,
           fromStatus: null,
           toStatus: BookingStatus.PENDING,
-          reason: 'booking created, awaiting payment confirmation',
+          reason: 'booking created, awaiting payment',
         },
       });
 
-      await tx.paymentTransaction.create({
+      const payment = await tx.paymentTransaction.create({
         data: {
           bookingId: b.id,
           userId: user.userId,
@@ -103,11 +117,15 @@ export class BookingService {
           amount,
           currency: court.currency,
           reference: ref,
+          method,
+          phone: msisdn,
         },
       });
 
-      return b;
+      return { booking: b, paymentId: payment.id };
     });
+
+    await this.paymentQueue.enqueueCharge(paymentId);
 
     const created = await this.db.booking.findUnique({
       where: { id: booking.id },
@@ -168,86 +186,6 @@ export class BookingService {
     return this.map(booking);
   }
 
-  /**
-   * Confirma pagamento manual (painel): método MPESA, EMOLA, CASH ou CARD + registo de quem confirmou.
-   */
-  async confirmBookingPayment(
-    actor: IAuthUser,
-    bookingId: string,
-    dto: BookingPaymentConfirmRequestDto
-  ): Promise<BookingResponseDto> {
-    if (!isPaymentStaff(actor.role)) {
-      throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
-    }
-
-    const meta: Record<string, unknown> = {};
-    if (dto.reference !== undefined) meta.externalReference = dto.reference;
-    if (dto.note !== undefined) meta.note = dto.note;
-
-    await this.db.$transaction(async tx => {
-      const b = await tx.booking.findUnique({
-        where: { id: bookingId },
-        include: { payments: true },
-      });
-      if (!b)
-        throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
-      if (b.status !== BookingStatus.PENDING) {
-        throw new HttpException(
-          'booking.error.invalidStatusForConfirmation',
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      const pendingPayment = b.payments.find(
-        p =>
-          p.type === PaymentType.BOOKING && p.status === PaymentStatus.PENDING
-      );
-      if (!pendingPayment) {
-        throw new HttpException(
-          'booking.error.invalidStatusForConfirmation',
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: BookingStatus.CONFIRMED,
-          paidAmount: b.totalPrice,
-        },
-      });
-
-      await tx.paymentTransaction.update({
-        where: { id: pendingPayment.id },
-        data: {
-          status: PaymentStatus.COMPLETED,
-          method: dto.method,
-          confirmedByUserId: actor.userId,
-          processedAt: new Date(),
-          metadata:
-            Object.keys(meta).length > 0
-              ? ({
-                  ...(pendingPayment.metadata as object),
-                  ...meta,
-                } as Prisma.InputJsonValue)
-              : pendingPayment.metadata ?? undefined,
-        },
-      });
-
-      await tx.bookingStatusHistory.create({
-        data: {
-          bookingId,
-          fromStatus: BookingStatus.PENDING,
-          toStatus: BookingStatus.CONFIRMED,
-          reason: `payment confirmed via ${dto.method}`,
-          changedByUserId: actor.userId,
-        },
-      });
-    });
-
-    return this.adminGetBooking(bookingId);
-  }
-
   async adminCreateBooking(
     adminUser: IAuthUser,
     dto: BookingAdminCreateRequestDto
@@ -262,9 +200,11 @@ export class BookingService {
       throw new HttpException('user.error.userSuspended', HttpStatus.FORBIDDEN);
     }
 
-    if (dto.confirmPaymentNow && !dto.method) {
+    const method = dto.paymentMethod ?? PaymentMethod.MPESA;
+    const msisdn = normalizeMozMsisdn(dto.phone);
+    if (!msisdn) {
       throw new HttpException(
-        'booking.error.confirmRequiresMethod',
+        'payment.error.invalidPhone',
         HttpStatus.BAD_REQUEST
       );
     }
@@ -280,12 +220,11 @@ export class BookingService {
       (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
     );
     const ref = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const fastConfirm = Boolean(dto.confirmPaymentNow && dto.method);
-    const paymentDueAt = fastConfirm
-      ? null
-      : new Date(Date.now() + PAYMENT_DEADLINE_MIN * 60000);
+    const paymentDueAt = new Date(
+      Date.now() + this.getPaymentDeadlineMin() * 60000
+    );
 
-    const booking = await this.db.$transaction(async tx => {
+    const { booking, paymentId } = await this.db.$transaction(async tx => {
       const b = await tx.booking.create({
         data: {
           courtId: court.id,
@@ -295,8 +234,8 @@ export class BookingService {
           durationMinutes: duration,
           totalPrice: amount,
           currency: court.currency,
-          paidAmount: fastConfirm ? amount : 0,
-          status: fastConfirm ? BookingStatus.CONFIRMED : BookingStatus.PENDING,
+          paidAmount: 0,
+          status: BookingStatus.PENDING,
           paymentDueAt,
           isAdminForced: true,
           participants: {
@@ -313,36 +252,33 @@ export class BookingService {
         data: {
           bookingId: b.id,
           fromStatus: null,
-          toStatus: fastConfirm ? BookingStatus.CONFIRMED : BookingStatus.PENDING,
-          reason: fastConfirm
-            ? `admin booking with payment (${dto.method})`
-            : 'admin booking, awaiting payment confirmation',
+          toStatus: BookingStatus.PENDING,
+          reason: 'admin booking, awaiting payment',
           changedByUserId: adminUser.userId,
         },
       });
 
-      await tx.paymentTransaction.create({
+      const payment = await tx.paymentTransaction.create({
         data: {
           bookingId: b.id,
           userId: dto.userId,
           type: PaymentType.BOOKING,
-          status: fastConfirm ? PaymentStatus.COMPLETED : PaymentStatus.PENDING,
+          status: PaymentStatus.PENDING,
           amount,
           currency: court.currency,
           reference: ref,
-          method: fastConfirm ? dto.method : undefined,
-          confirmedByUserId: fastConfirm ? adminUser.userId : undefined,
-          processedAt: fastConfirm ? new Date() : null,
-          metadata: fastConfirm
-            ? ({
-                createdByAdmin: adminUser.userId,
-              } as Prisma.InputJsonValue)
-            : undefined,
+          method,
+          phone: msisdn,
+          metadata: {
+            createdByAdmin: adminUser.userId,
+          } as Prisma.InputJsonValue,
         },
       });
 
-      return b;
+      return { booking: b, paymentId: payment.id };
     });
+
+    await this.paymentQueue.enqueueCharge(paymentId);
 
     const created = await this.db.booking.findUnique({
       where: { id: booking.id },
@@ -419,7 +355,7 @@ export class BookingService {
       await tx.paymentTransaction.updateMany({
         where: {
           bookingId: id,
-          status: PaymentStatus.PENDING,
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
           type: PaymentType.BOOKING,
         },
         data: { status: PaymentStatus.CANCELLED },
@@ -497,7 +433,7 @@ export class BookingService {
       await tx.paymentTransaction.updateMany({
         where: {
           bookingId: id,
-          status: PaymentStatus.PENDING,
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
           type: PaymentType.BOOKING,
         },
         data: { status: PaymentStatus.CANCELLED },
@@ -558,7 +494,9 @@ export class BookingService {
   }
 
   /**
-   * Cancela reservas PENDING cujo prazo de pagamento expirou (cron).
+   * Cancela reservas PENDING cujo prazo de pagamento expirou (cron). Cobre
+   * tanto pagamentos ainda PENDING (job nunca correu) como PROCESSING
+   * (gateway nunca respondeu).
    */
   async expirePendingBookings(): Promise<number> {
     const now = new Date();
@@ -585,7 +523,7 @@ export class BookingService {
         await tx.paymentTransaction.updateMany({
           where: {
             bookingId: row.id,
-            status: PaymentStatus.PENDING,
+            status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
             type: PaymentType.BOOKING,
           },
           data: { status: PaymentStatus.CANCELLED },
@@ -629,6 +567,13 @@ export class BookingService {
 
     if (bookingConflict > 0)
       throw new HttpException('booking.error.conflict', HttpStatus.CONFLICT);
+  }
+
+  private getPaymentDeadlineMin(): number {
+    return (
+      this.configService.get<number>('payment.paymentDeadlineMin') ??
+      DEFAULT_PAYMENT_DEADLINE_MIN
+    );
   }
 
   private inc() {

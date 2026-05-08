@@ -35,6 +35,7 @@ enum BookingStatus {
 
 enum PaymentStatus {
   PENDING
+  PROCESSING
   COMPLETED
   FAILED
   REFUNDED
@@ -293,20 +294,25 @@ model BookingStatusHistory {
 }
 
 model PaymentTransaction {
-  id                  String          @id @default(uuid())
-  bookingId           String
-  userId              String
-  type                PaymentType
-  status              PaymentStatus   @default(PENDING)
-  amount              Decimal         @db.Decimal(10, 2)
-  currency            String          @default("MZN")
-  reference           String          @unique
-  method              PaymentMethod?
-  confirmedByUserId   String?
-  metadata            Json?
-  processedAt         DateTime?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                    String          @id @default(uuid())
+  bookingId             String
+  userId                String
+  type                  PaymentType
+  status                PaymentStatus   @default(PENDING)
+  amount                Decimal         @db.Decimal(10, 2)
+  currency              String          @default("MZN")
+  reference             String          @unique
+  method                PaymentMethod?
+  phone                 String?
+  providerTransactionId String?
+  providerStatusCode    String?
+  providerMessage       String?
+  attempts              Int             @default(0)
+  confirmedByUserId     String?
+  metadata              Json?
+  processedAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   booking       Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   user          User    @relation(fields: [userId], references: [id])
