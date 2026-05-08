@@ -14,6 +14,7 @@ import {
   BookingAdminCreateRequestDto,
   BookingAdminQueryRequestDto,
 } from '../dtos/request/booking.request';
+import { BookingCheckoutSessionResponseDto } from '../dtos/response/booking.checkout.response';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
 
@@ -59,18 +60,36 @@ export class BookingAdminController {
   @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
   @ApiBearerAuth('accessToken')
   @ApiOperation({
-    summary: 'Criar reserva para utilizador e iniciar pagamento M-Pesa (admin)',
+    summary:
+      'Iniciar checkout para utilizador (admin): cria BookingCheckoutSession OPEN e dispara o débito M-Pesa em background',
+    description:
+      'Não cria Booking. Use GET /admin/booking/checkout/:sessionId para fazer polling. Quando status === COMPLETED, bookingId é populado.',
   })
   @DocResponse({
-    serialization: BookingResponseDto,
+    serialization: BookingCheckoutSessionResponseDto,
     httpStatus: HttpStatus.CREATED,
-    messageKey: 'booking.success.created',
+    messageKey: 'booking.success.checkoutStarted',
   })
   async createBooking(
     @AuthUser() admin: IAuthUser,
     @Body() dto: BookingAdminCreateRequestDto
-  ): Promise<BookingResponseDto> {
+  ): Promise<BookingCheckoutSessionResponseDto> {
     return this.bookingService.adminCreateBooking(admin, dto);
+  }
+
+  @Get('/checkout/:sessionId')
+  @AllowedRoles([Role.ADMIN, Role.EMPLOYEE])
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Consultar BookingCheckoutSession (admin)' })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkoutDetails',
+  })
+  async getCheckoutSession(
+    @Param('sessionId') sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.adminGetCheckoutSession(sessionId);
   }
 
   @Post(':id/cancel')

@@ -17,9 +17,17 @@
     "checkInQr": "Check-in QR generated successfully",
     "checkedIn": "Booking checked in successfully"
   },
+  "notification": {
+    "dispatched": "Booking notification dispatched",
+    "failed": "Booking notification failed"
+  },
   "error": {
     "notFound": "Booking not found",
+    "invalid": "Booking is in an invalid state for this operation",
     "checkoutSessionNotFound": "Booking checkout session not found",
+    "checkoutExpired": "Booking checkout session has expired",
+    "checkoutAlreadyCompleted": "Booking checkout session has already been completed",
+    "checkoutPaymentFailed": "Booking checkout payment was declined by the gateway",
     "checkoutFinalizationFailed": "Booking could not be finalized after payment",
     "nothingToConfirm": "No pending bookings found to confirm",
     "slotRangeRequired": "startAt and endAt are required together",

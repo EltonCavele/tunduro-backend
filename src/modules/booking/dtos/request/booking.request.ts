@@ -50,6 +50,26 @@ export class BookingAdminCreateRequestDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  participantUserIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], example: ['friend@example.com'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsEmail({}, { each: true })
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((item: string) => item.trim().toLowerCase())
+      : value
+  )
+  inviteEmails?: string[];
 }
 
 export class BookingCreateRequestDto {

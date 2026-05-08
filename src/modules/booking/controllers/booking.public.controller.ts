@@ -20,6 +20,7 @@ import {
   BookingCreateRequestDto,
   BookingMeQueryRequestDto,
 } from '../dtos/request/booking.request';
+import { BookingCheckoutSessionResponseDto } from '../dtos/response/booking.checkout.response';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
 
@@ -34,18 +35,37 @@ export class BookingPublicController {
   @ApiBearerAuth('accessToken')
   @ApiOperation({
     summary:
-      'Criar reserva e iniciar pagamento M-Pesa (PENDING até confirmação do gateway)',
+      'Iniciar checkout: cria BookingCheckoutSession OPEN e dispara o débito M-Pesa em background',
+    description:
+      'Não cria Booking. Use GET /bookings/checkout/:sessionId para fazer polling ao estado. Quando status === COMPLETED, bookingId é populado.',
   })
   @DocResponse({
-    serialization: BookingResponseDto,
+    serialization: BookingCheckoutSessionResponseDto,
     httpStatus: HttpStatus.CREATED,
-    messageKey: 'booking.success.created',
+    messageKey: 'booking.success.checkoutStarted',
   })
   async createBooking(
     @AuthUser() user: IAuthUser,
     @Body() payload: BookingCreateRequestDto
-  ): Promise<BookingResponseDto> {
+  ): Promise<BookingCheckoutSessionResponseDto> {
     return this.bookingService.createBooking(user, payload);
+  }
+
+  @Get('/bookings/checkout/:sessionId')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Consultar uma BookingCheckoutSession (polling do estado)',
+  })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkoutDetails',
+  })
+  async getCheckoutSession(
+    @AuthUser() user: IAuthUser,
+    @Param('sessionId') sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.getCheckoutSession(user, sessionId);
   }
 
   @Get('/bookings/me')

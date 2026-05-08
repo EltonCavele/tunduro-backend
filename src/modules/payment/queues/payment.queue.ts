@@ -6,7 +6,7 @@ export const PAYMENT_QUEUE = 'payment';
 export const PAYMENT_CHARGE_JOB = 'charge';
 
 export interface PaymentChargeJobData {
-  paymentId: string;
+  sessionId: string;
 }
 
 @Injectable()
@@ -15,10 +15,10 @@ export class PaymentQueue {
     @InjectQueue(PAYMENT_QUEUE) private readonly queue: Queue<PaymentChargeJobData>
   ) {}
 
-  async enqueueCharge(paymentId: string): Promise<void> {
+  async enqueueCharge(sessionId: string): Promise<void> {
     await this.queue.add(
       PAYMENT_CHARGE_JOB,
-      { paymentId },
+      { sessionId },
       {
         attempts: 1,
         removeOnComplete: true,

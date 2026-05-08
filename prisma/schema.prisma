@@ -99,6 +99,16 @@ enum LightingActionType {
   STATUS_SYNC
 }
 
+enum BookingCheckoutSessionStatus {
+  OPEN
+  PAYMENT_FAILED
+  FINALIZING
+  COMPLETED
+  EXPIRED
+  REFUND_PENDING
+  REFUNDED
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -135,6 +145,7 @@ model User {
   checkInBookings         Booking[]                @relation("CheckInByUser")
   lightingActions         LightingActionLog[]      @relation("LightingActionRequestedBy")
   confirmedPayments       PaymentTransaction[]     @relation("ConfirmedPayments")
+  checkoutSessions        BookingCheckoutSession[] @relation("CheckoutSessionOrganizer")
 
   @@map("users")
 }
@@ -180,6 +191,7 @@ model Court {
   waitlistEntries         WaitlistEntry[]
   lightingActionLogs      LightingActionLog[]
   lightingDeviceStates    LightingDeviceState[]
+  checkoutSessions        BookingCheckoutSession[]
 
   @@index([isActive, deletedAt])
   @@map("courts")
@@ -231,6 +243,7 @@ model Booking {
   ratings            CourtRating[]
   waitlistEntries    WaitlistEntry[]         @relation("WaitlistBooking")
   lightingActionLogs LightingActionLog[]
+  checkoutSession    BookingCheckoutSession?
 
   @@index([courtId, startAt, endAt])
   @@index([organizerId, startAt])
@@ -411,4 +424,42 @@ model LightingDeviceState {
   @@index([isOnline, updatedAt])
   @@index([courtId])
   @@map("lighting_device_states")
+}
+
+model BookingCheckoutSession {
+  id                 String                       @id @default(uuid())
+  organizerId        String
+  courtId            String
+  bookingId          String?                      @unique
+  startAt            DateTime
+  endAt              DateTime
+  durationMinutes    Int
+  amount             Decimal                      @db.Decimal(10, 2)
+  currency           String                       @default("MZN")
+  reference          String                       @unique
+  participantUserIds Json?
+  inviteEmails       Json?
+  status             BookingCheckoutSessionStatus @default(OPEN)
+  expiresAt          DateTime
+  checkoutUrl        String?
+  paymentMethod      PaymentMethod?
+  phone              String?
+  refundId           String?
+  failureReason      String?
+  paidAt             DateTime?
+  completedAt        DateTime?
+  refundedAt         DateTime?
+  metadata           Json?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  organizer User     @relation("CheckoutSessionOrganizer", fields: [organizerId], references: [id])
+  court     Court    @relation(fields: [courtId], references: [id])
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([courtId, startAt, endAt, status])
+  @@index([organizerId, startAt, status])
+  @@index([status, expiresAt])
+  @@index([refundId])
+  @@map("booking_checkout_sessions")
 }

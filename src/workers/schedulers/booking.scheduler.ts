@@ -13,9 +13,11 @@ export class BookingScheduler {
   async handleLifecycleTasks() {
     this.logger.debug('Running booking lifecycle tasks...');
 
-    const expired = await this.bookingService.expirePendingBookings();
+    const expired = await this.bookingService.expireOpenSessions();
     if (expired > 0) {
-      this.logger.log(`Expired ${expired} pending booking(s) (payment timeout).`);
+      this.logger.log(
+        `Expired ${expired} checkout session(s) (payment timeout).`
+      );
     }
   }
 }

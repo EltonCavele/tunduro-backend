@@ -2,8 +2,8 @@ import { randomUUID } from 'crypto';
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  BookingCheckoutSessionStatus,
   BookingStatus,
-  ParticipantStatus,
   PaymentMethod,
   PaymentStatus,
   PaymentType,
@@ -16,6 +16,7 @@ import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 import { CourtService } from 'src/modules/court/services/court.service';
 import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
+import { BookingNotifierService } from 'src/modules/notification/services/booking.notifier.service';
 import { PaymentQueue } from 'src/modules/payment/queues/payment.queue';
 import { normalizeMozMsisdn } from 'src/modules/payment/utils/phone.util';
 
@@ -27,6 +28,7 @@ import {
   BookingCreateRequestDto,
   BookingMeQueryRequestDto,
 } from '../dtos/request/booking.request';
+import { BookingCheckoutSessionResponseDto } from '../dtos/response/booking.checkout.response';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 
 const DEFAULT_PAYMENT_DEADLINE_MIN = 30;
@@ -40,99 +42,93 @@ export class BookingService {
     private readonly courtService: CourtService,
     private readonly lightingOrchestratorService: LightingOrchestratorService,
     private readonly paymentQueue: PaymentQueue,
+    private readonly bookingNotifier: BookingNotifierService,
     private readonly configService: ConfigService
   ) {}
 
   /**
-   * Cria reserva PENDING, regista a tentativa de pagamento e enfileira o
-   * débito M-Pesa. O cliente faz polling em GET /bookings/:id para o estado
-   * final (CONFIRMED se o gateway aceitar, CANCELLED se falhar).
+   * Inicia um checkout: cria uma BookingCheckoutSession OPEN (que segura o
+   * slot) e enfileira o débito M-Pesa. O Booking só nasce após o pagamento
+   * confirmar. O cliente faz polling em GET /bookings/checkout/:sessionId.
    */
   async createBooking(
     user: IAuthUser,
     dto: BookingCreateRequestDto
-  ): Promise<BookingResponseDto> {
-    const method = dto.paymentMethod ?? PaymentMethod.MPESA;
-    const msisdn = normalizeMozMsisdn(dto.phone);
-    if (!msisdn) {
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.startCheckout({
+      organizerId: user.userId,
+      dto,
+      metadata: null,
+    });
+  }
+
+  async adminCreateBooking(
+    adminUser: IAuthUser,
+    dto: BookingAdminCreateRequestDto
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const targetUser = await this.db.user.findUnique({
+      where: { id: dto.userId },
+    });
+    if (!targetUser || targetUser.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+    if (targetUser.suspendedAt) {
+      throw new HttpException('user.error.userSuspended', HttpStatus.FORBIDDEN);
+    }
+
+    const session = await this.startCheckout({
+      organizerId: dto.userId,
+      dto: {
+        courtId: dto.courtId,
+        startAt: dto.startAt,
+        endAt: dto.endAt,
+        phone: dto.phone,
+        paymentMethod: dto.paymentMethod,
+        participantUserIds: dto.participantUserIds,
+        inviteEmails: dto.inviteEmails,
+      },
+      metadata: { createdByAdmin: adminUser.userId },
+    });
+
+    await this.bookingNotifier.notifyCheckoutCreatedByAdmin(session.id);
+
+    return session;
+  }
+
+  async getCheckoutSession(
+    user: IAuthUser,
+    sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const session = await this.db.bookingCheckoutSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) {
       throw new HttpException(
-        'payment.error.invalidPhone',
-        HttpStatus.BAD_REQUEST
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
       );
     }
 
-    const court = await this.courtService.assertCourtIsBookable(dto.courtId);
-    const start = new Date(dto.startAt);
-    const end = new Date(dto.endAt);
-    const duration = Math.round((end.getTime() - start.getTime()) / 60000);
+    if (session.organizerId !== user.userId && user.role !== Role.ADMIN) {
+      throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
+    }
 
-    await this.assertAvailable(court.id, start, end);
+    return this.mapSession(session);
+  }
 
-    const amount = Number(
-      (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
-    );
-    const ref = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const paymentDueAt = new Date(
-      Date.now() + this.getPaymentDeadlineMin() * 60000
-    );
-
-    const { booking, paymentId } = await this.db.$transaction(async tx => {
-      const b = await tx.booking.create({
-        data: {
-          courtId: court.id,
-          organizerId: user.userId,
-          startAt: start,
-          endAt: end,
-          durationMinutes: duration,
-          totalPrice: amount,
-          currency: court.currency,
-          paidAmount: 0,
-          status: BookingStatus.PENDING,
-          paymentDueAt,
-          participants: {
-            create: {
-              userId: user.userId,
-              status: ParticipantStatus.ACCEPTED,
-              isOrganizer: true,
-            },
-          },
-        },
-      });
-
-      await tx.bookingStatusHistory.create({
-        data: {
-          bookingId: b.id,
-          fromStatus: null,
-          toStatus: BookingStatus.PENDING,
-          reason: 'booking created, awaiting payment',
-        },
-      });
-
-      const payment = await tx.paymentTransaction.create({
-        data: {
-          bookingId: b.id,
-          userId: user.userId,
-          type: PaymentType.BOOKING,
-          status: PaymentStatus.PENDING,
-          amount,
-          currency: court.currency,
-          reference: ref,
-          method,
-          phone: msisdn,
-        },
-      });
-
-      return { booking: b, paymentId: payment.id };
+  async adminGetCheckoutSession(
+    sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    const session = await this.db.bookingCheckoutSession.findUnique({
+      where: { id: sessionId },
     });
-
-    await this.paymentQueue.enqueueCharge(paymentId);
-
-    const created = await this.db.booking.findUnique({
-      where: { id: booking.id },
-      include: this.inc(),
-    });
-
-    return this.map(created!);
+    if (!session) {
+      throw new HttpException(
+        'booking.error.checkoutSessionNotFound',
+        HttpStatus.NOT_FOUND
+      );
+    }
+    return this.mapSession(session);
   }
 
   async getMyBookings(
@@ -186,108 +182,6 @@ export class BookingService {
     return this.map(booking);
   }
 
-  async adminCreateBooking(
-    adminUser: IAuthUser,
-    dto: BookingAdminCreateRequestDto
-  ): Promise<BookingResponseDto> {
-    const user = await this.db.user.findUnique({
-      where: { id: dto.userId },
-    });
-    if (!user || user.deletedAt) {
-      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
-    }
-    if (user.suspendedAt) {
-      throw new HttpException('user.error.userSuspended', HttpStatus.FORBIDDEN);
-    }
-
-    const method = dto.paymentMethod ?? PaymentMethod.MPESA;
-    const msisdn = normalizeMozMsisdn(dto.phone);
-    if (!msisdn) {
-      throw new HttpException(
-        'payment.error.invalidPhone',
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    const court = await this.courtService.assertCourtIsBookable(dto.courtId);
-    const start = new Date(dto.startAt);
-    const end = new Date(dto.endAt);
-    const duration = Math.round((end.getTime() - start.getTime()) / 60000);
-
-    await this.assertAvailable(court.id, start, end);
-
-    const amount = Number(
-      (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
-    );
-    const ref = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const paymentDueAt = new Date(
-      Date.now() + this.getPaymentDeadlineMin() * 60000
-    );
-
-    const { booking, paymentId } = await this.db.$transaction(async tx => {
-      const b = await tx.booking.create({
-        data: {
-          courtId: court.id,
-          organizerId: dto.userId,
-          startAt: start,
-          endAt: end,
-          durationMinutes: duration,
-          totalPrice: amount,
-          currency: court.currency,
-          paidAmount: 0,
-          status: BookingStatus.PENDING,
-          paymentDueAt,
-          isAdminForced: true,
-          participants: {
-            create: {
-              userId: dto.userId,
-              status: ParticipantStatus.ACCEPTED,
-              isOrganizer: true,
-            },
-          },
-        },
-      });
-
-      await tx.bookingStatusHistory.create({
-        data: {
-          bookingId: b.id,
-          fromStatus: null,
-          toStatus: BookingStatus.PENDING,
-          reason: 'admin booking, awaiting payment',
-          changedByUserId: adminUser.userId,
-        },
-      });
-
-      const payment = await tx.paymentTransaction.create({
-        data: {
-          bookingId: b.id,
-          userId: dto.userId,
-          type: PaymentType.BOOKING,
-          status: PaymentStatus.PENDING,
-          amount,
-          currency: court.currency,
-          reference: ref,
-          method,
-          phone: msisdn,
-          metadata: {
-            createdByAdmin: adminUser.userId,
-          } as Prisma.InputJsonValue,
-        },
-      });
-
-      return { booking: b, paymentId: payment.id };
-    });
-
-    await this.paymentQueue.enqueueCharge(paymentId);
-
-    const created = await this.db.booking.findUnique({
-      where: { id: booking.id },
-      include: this.inc(),
-    });
-
-    return this.map(created!);
-  }
-
   async adminListBookings(
     query: BookingAdminQueryRequestDto
   ): Promise<ApiPaginatedDataDto<BookingResponseDto>> {
@@ -334,7 +228,7 @@ export class BookingService {
   }
 
   async adminCancelBooking(
-    admin: IAuthUser,
+    _admin: IAuthUser,
     id: string,
     dto: BookingAdminCancelRequestDto
   ): Promise<BookingResponseDto> {
@@ -342,13 +236,15 @@ export class BookingService {
     if (!b)
       throw new HttpException('booking.error.notFound', HttpStatus.NOT_FOUND);
 
+    const reason = dto.reason || 'cancelled by admin';
+
     await this.db.$transaction(async tx => {
       await tx.booking.update({
         where: { id },
         data: {
           status: BookingStatus.CANCELLED,
           cancelledAt: new Date(),
-          cancellationReason: dto.reason || 'cancelled by admin',
+          cancellationReason: reason,
         },
       });
 
@@ -376,6 +272,8 @@ export class BookingService {
         );
       }
     }
+
+    await this.bookingNotifier.notifyBookingCancelledByAdmin(id, reason);
 
     return this.adminGetBooking(id);
   }
@@ -407,6 +305,8 @@ export class BookingService {
         }`
       );
     }
+
+    await this.bookingNotifier.notifyCheckIn(id);
 
     return this.adminGetBooking(id);
   }
@@ -490,59 +390,109 @@ export class BookingService {
       );
     }
 
+    await this.bookingNotifier.notifyCheckIn(id);
+
     return this.getBookingForUser(user, id);
   }
 
   /**
-   * Cancela reservas PENDING cujo prazo de pagamento expirou (cron). Cobre
-   * tanto pagamentos ainda PENDING (job nunca correu) como PROCESSING
-   * (gateway nunca respondeu).
+   * Cron: marca como EXPIRED qualquer BookingCheckoutSession ainda OPEN ou
+   * FINALIZING cuja expiresAt já passou. Liberta o slot e notifica o organizador.
    */
-  async expirePendingBookings(): Promise<number> {
+  async expireOpenSessions(): Promise<number> {
     const now = new Date();
-    const expired = await this.db.booking.findMany({
+    const candidates = await this.db.bookingCheckoutSession.findMany({
       where: {
-        status: BookingStatus.PENDING,
-        paymentDueAt: { lt: now },
+        status: {
+          in: [
+            BookingCheckoutSessionStatus.OPEN,
+            BookingCheckoutSessionStatus.FINALIZING,
+          ],
+        },
+        expiresAt: { lt: now },
       },
       select: { id: true },
     });
 
     let count = 0;
-    for (const row of expired) {
-      await this.db.$transaction(async tx => {
-        await tx.booking.update({
-          where: { id: row.id },
-          data: {
-            status: BookingStatus.CANCELLED,
-            cancelledAt: now,
-            cancellationReason: 'payment timeout',
-          },
-        });
-
-        await tx.paymentTransaction.updateMany({
-          where: {
-            bookingId: row.id,
-            status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
-            type: PaymentType.BOOKING,
-          },
-          data: { status: PaymentStatus.CANCELLED },
-        });
-
-        await tx.bookingStatusHistory.create({
-          data: {
-            bookingId: row.id,
-            fromStatus: BookingStatus.PENDING,
-            toStatus: BookingStatus.CANCELLED,
-            reason: 'payment timeout',
-            changedByUserId: null,
-          },
-        });
+    for (const row of candidates) {
+      await this.db.bookingCheckoutSession.update({
+        where: { id: row.id },
+        data: {
+          status: BookingCheckoutSessionStatus.EXPIRED,
+          failureReason: 'session timeout',
+        },
       });
+
+      await this.bookingNotifier.notifyCheckoutExpired(row.id);
       count += 1;
     }
 
     return count;
+  }
+
+  private async startCheckout(args: {
+    organizerId: string;
+    dto: BookingCreateRequestDto;
+    metadata: Prisma.InputJsonValue | null;
+  }): Promise<BookingCheckoutSessionResponseDto> {
+    const { organizerId, dto, metadata } = args;
+    const method = dto.paymentMethod ?? PaymentMethod.MPESA;
+
+    const msisdn = normalizeMozMsisdn(dto.phone);
+    if (!msisdn) {
+      throw new HttpException(
+        'payment.error.invalidPhone',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const court = await this.courtService.assertCourtIsBookable(dto.courtId);
+    const start = new Date(dto.startAt);
+    const end = new Date(dto.endAt);
+    const duration = Math.round((end.getTime() - start.getTime()) / 60000);
+
+    if (Number.isNaN(duration) || duration <= 0) {
+      throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
+    }
+
+    await this.assertAvailable(court.id, start, end);
+
+    const amount = Number(
+      (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
+    );
+    const reference = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const expiresAt = new Date(
+      Date.now() + this.getPaymentDeadlineMin() * 60000
+    );
+
+    const session = await this.db.bookingCheckoutSession.create({
+      data: {
+        organizerId,
+        courtId: court.id,
+        startAt: start,
+        endAt: end,
+        durationMinutes: duration,
+        amount,
+        currency: court.currency,
+        reference,
+        status: BookingCheckoutSessionStatus.OPEN,
+        expiresAt,
+        paymentMethod: method,
+        phone: msisdn,
+        participantUserIds: dto.participantUserIds
+          ? (dto.participantUserIds as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        inviteEmails: dto.inviteEmails
+          ? (dto.inviteEmails as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        metadata: metadata ?? Prisma.JsonNull,
+      },
+    });
+
+    await this.paymentQueue.enqueueCharge(session.id);
+
+    return this.mapSession(session);
   }
 
   private async assertAvailable(courtId: string, start: Date, end: Date) {
@@ -552,13 +502,7 @@ export class BookingService {
       courtId,
       startAt: { lt: end },
       endAt: { gt: start },
-      OR: [
-        { status: BookingStatus.CONFIRMED },
-        {
-          status: BookingStatus.PENDING,
-          paymentDueAt: { gt: now },
-        },
-      ],
+      status: BookingStatus.CONFIRMED,
     };
 
     const bookingConflict = await this.db.booking.count({
@@ -566,6 +510,24 @@ export class BookingService {
     });
 
     if (bookingConflict > 0)
+      throw new HttpException('booking.error.conflict', HttpStatus.CONFLICT);
+
+    const sessionConflict = await this.db.bookingCheckoutSession.count({
+      where: {
+        courtId,
+        startAt: { lt: end },
+        endAt: { gt: start },
+        status: {
+          in: [
+            BookingCheckoutSessionStatus.OPEN,
+            BookingCheckoutSessionStatus.FINALIZING,
+          ],
+        },
+        expiresAt: { gt: now },
+      },
+    });
+
+    if (sessionConflict > 0)
       throw new HttpException('booking.error.conflict', HttpStatus.CONFLICT);
   }
 
@@ -593,5 +555,35 @@ export class BookingService {
       payments: b.payments || [],
       statusHistory: b.statusHistory || [],
     };
+  }
+
+  private mapSession(s: any): BookingCheckoutSessionResponseDto {
+    return {
+      id: s.id,
+      status: s.status,
+      bookingId: s.bookingId,
+      organizerId: s.organizerId,
+      courtId: s.courtId,
+      startAt: s.startAt,
+      endAt: s.endAt,
+      durationMinutes: s.durationMinutes,
+      amount: Number(s.amount),
+      currency: s.currency,
+      reference: s.reference,
+      paymentMethod: s.paymentMethod,
+      phone: this.maskPhone(s.phone),
+      failureReason: s.failureReason,
+      expiresAt: s.expiresAt,
+      paidAt: s.paidAt,
+      completedAt: s.completedAt,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    };
+  }
+
+  private maskPhone(phone: string | null): string | null {
+    if (!phone) return null;
+    if (phone.length <= 4) return `*** ${phone}`;
+    return `*** ${phone.slice(-4)}`;
   }
 }
