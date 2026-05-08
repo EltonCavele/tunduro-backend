@@ -30,9 +30,24 @@ export class MpesaProvider implements IPaymentProvider {
     const serviceProviderCode =
       this.configService.get<string>('payment.mpesa.serviceProviderCode') ?? '';
 
-    if (!baseUrl || !apiKey || !publicKey || !origin || !serviceProviderCode) {
+    const missing = [
+      !baseUrl && 'host',
+      !apiKey && 'apiKey',
+      !publicKey && 'publicKey',
+      !origin && 'origin',
+      !serviceProviderCode && 'serviceProviderCode',
+    ].filter(Boolean);
+
+    if (missing.length > 0) {
+      this.logger.error(
+        `M-Pesa configuration missing fields: ${missing.join(', ')}`
+      );
       throw new Error('payment.error.gatewayUnavailable');
     }
+
+    this.logger.log(
+      `Initializing M-Pesa client (host=${baseUrl}, origin=${origin}, providerCode=${serviceProviderCode})`
+    );
 
     mpesa.initializeApi({
       baseUrl,
@@ -46,6 +61,7 @@ export class MpesaProvider implements IPaymentProvider {
 
   async charge(input: ChargeInput): Promise<ChargeResult> {
     if (!input.phone) {
+      this.logger.warn('M-Pesa charge requested without phone');
       return {
         success: false,
         status: 'FAILED',
@@ -68,8 +84,25 @@ export class MpesaProvider implements IPaymentProvider {
       };
     }
 
-    const transactionRef = input.reference.slice(0, 12);
-    const thirdPartyRef = input.thirdPartyRef.slice(0, 20);
+    const transactionRef = this.sanitizeRef(input.reference, 20);
+    const thirdPartyRef = this.sanitizeRef(input.thirdPartyRef, 20);
+    const maskedPhone = this.maskMsisdn(input.phone);
+
+    if (!transactionRef || !thirdPartyRef) {
+      this.logger.error(
+        `M-Pesa charge aborted: empty ref after sanitize (transactionRef="${transactionRef}", thirdPartyRef="${thirdPartyRef}")`
+      );
+      return {
+        success: false,
+        status: 'FAILED',
+        providerStatusCode: 'INVALID_REFERENCE',
+        providerMessage: 'payment.error.gatewayUnavailable',
+      };
+    }
+
+    this.logger.log(
+      `M-Pesa charge → msisdn=${maskedPhone}, amount=${input.amount} ${input.currency}, ref=${transactionRef}, thirdPartyRef=${thirdPartyRef}`
+    );
 
     try {
       const response = await mpesa.initiate_c2b(
@@ -79,30 +112,58 @@ export class MpesaProvider implements IPaymentProvider {
         thirdPartyRef
       );
 
-      const success = response.output_ResponseCode === MPESA_SUCCESS_CODE;
+      const code = response.output_ResponseCode;
+      const desc = response.output_ResponseDesc ?? '';
+      const success = code === MPESA_SUCCESS_CODE;
+
+      if (success) {
+        this.logger.log(
+          `M-Pesa charge ✓ ${code} (txId=${response.output_TransactionID ?? 'n/a'}) — ${desc}`
+        );
+      } else {
+        this.logger.warn(`M-Pesa charge ✗ ${code} — ${desc}`);
+      }
 
       return {
         success,
         status: success ? 'COMPLETED' : 'FAILED',
         providerTransactionId: response.output_TransactionID,
-        providerStatusCode: response.output_ResponseCode,
-        providerMessage:
-          response.output_ResponseDesc ?? (success ? 'OK' : 'Payment declined'),
+        providerStatusCode: code,
+        providerMessage: desc || (success ? 'OK' : 'Payment declined'),
       };
     } catch (error: any) {
       const code = error?.output_ResponseCode ?? 'GATEWAY_ERROR';
-      const message =
+      const desc =
         error?.output_ResponseDesc ??
         error?.message ??
         'payment.error.gatewayUnavailable';
-      this.logger.error(`M-Pesa charge failed: ${code} - ${message}`);
+      this.logger.error(
+        `M-Pesa charge ✗ ${code} — ${desc} (msisdn=${maskedPhone}, ref=${transactionRef})`
+      );
+      if (code === 'GATEWAY_ERROR' && error?.stack) {
+        this.logger.debug(error.stack);
+      }
 
       return {
         success: false,
         status: 'FAILED',
         providerStatusCode: code,
-        providerMessage: message,
+        providerMessage: desc,
       };
     }
+  }
+
+  private maskMsisdn(phone: string): string {
+    if (phone.length <= 4) return `*** ${phone}`;
+    return `${phone.slice(0, 3)} *** ${phone.slice(-2)}`;
+  }
+
+  /**
+   * O M-Pesa Mozambique aceita apenas caracteres alfanuméricos
+   * em `input_TransactionReference` e `input_ThirdPartyReference`.
+   * Qualquer hífen / underscore / espaço devolve INS-17.
+   */
+  private sanitizeRef(value: string, maxLength: number): string {
+    return value.replace(/[^A-Za-z0-9]/g, '').slice(0, maxLength);
   }
 }

@@ -490,7 +490,20 @@ export class BookingService {
       },
     });
 
-    await this.paymentQueue.enqueueCharge(session.id);
+    try {
+      await this.paymentQueue.enqueueCharge(session.id);
+    } catch (error) {
+      this.logger.error(
+        `Failed to enqueue charge for session ${session.id}: ${
+          (error as Error)?.message ?? 'unknown'
+        }`
+      );
+      await this.db.bookingCheckoutSession.delete({ where: { id: session.id } });
+      throw new HttpException(
+        'payment.error.gatewayUnavailable',
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
 
     return this.mapSession(session);
   }
