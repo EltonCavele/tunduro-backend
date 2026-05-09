@@ -1,6 +1,7 @@
 import {
   Booking,
   BookingCheckoutSession,
+  BookingInvitation,
   Court,
   User,
 } from '@prisma/client';
@@ -28,6 +29,21 @@ export interface CheckoutSessionNotificationContext {
   >;
   court: Pick<Court, 'name'>;
   organizer: Pick<User, 'firstName' | 'email'>;
+  appName: string;
+  frontendUrl?: string;
+}
+
+export interface InvitationNotificationContext {
+  booking: Pick<
+    Booking,
+    'id' | 'startAt' | 'endAt' | 'totalPrice' | 'currency'
+  >;
+  court: Pick<Court, 'name'>;
+  inviter: Pick<User, 'firstName' | 'email'>;
+  invitation: Pick<
+    BookingInvitation,
+    'id' | 'token' | 'expiresAt' | 'inviteeEmail' | 'invitedUserId'
+  >;
   appName: string;
   frontendUrl?: string;
 }
@@ -401,5 +417,132 @@ export function checkoutExpiredTemplate(
       'Iniciar nova reserva'
     ),
     emailText: `${greeting}\n\n${intro}\n\n${sessionDetailsText(ctx)}`,
+  };
+}
+
+function inviterDisplay(ctx: InvitationNotificationContext): string {
+  return ctx.inviter.firstName?.trim() || ctx.inviter.email;
+}
+
+function invitationLink(ctx: InvitationNotificationContext): string | null {
+  if (!ctx.frontendUrl) return null;
+  const base = ctx.frontendUrl.replace(/\/+$/, '');
+  return `${base}/invite/${ctx.invitation.token}`;
+}
+
+function invitationDetailsHtml(ctx: InvitationNotificationContext): string {
+  const { booking, court } = ctx;
+  return `
+    <table style="border-collapse:collapse; font-size:14px; margin-top:8px;">
+      <tr><td style="padding:4px 12px 4px 0; color:#666;">Court</td><td style="padding:4px 0;">${court.name}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#666;">Horário</td><td style="padding:4px 0;">${formatRange(
+        booking.startAt,
+        booking.endAt
+      )}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#666;">Convidado por</td><td style="padding:4px 0;">${inviterDisplay(
+        ctx
+      )}</td></tr>
+    </table>
+  `.trim();
+}
+
+function invitationDetailsText(ctx: InvitationNotificationContext): string {
+  const { booking, court } = ctx;
+  return [
+    `Court: ${court.name}`,
+    `Horário: ${formatRange(booking.startAt, booking.endAt)}`,
+    `Convidado por: ${inviterDisplay(ctx)}`,
+  ].join('\n');
+}
+
+function wrapInvitationEmail(
+  title: string,
+  body: string,
+  ctx: InvitationNotificationContext
+): string {
+  const link = invitationLink(ctx);
+  const cta = link
+    ? `<p style="margin: 24px 0;">
+         <a href="${link}" style="background:#111;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;display:inline-block;margin-right:8px;">Aceitar</a>
+         <a href="${link}?action=decline" style="background:#eee;color:#111;padding:10px 16px;text-decoration:none;border-radius:6px;display:inline-block;">Recusar</a>
+       </p>
+       <p style="color:#666;font-size:12px;">Se o botão não abrir, copia este link: ${link}</p>`
+    : '';
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; max-width: 560px; margin: 0 auto;">
+      <h2 style="margin: 0 0 12px 0;">${title}</h2>
+      ${body}
+      ${cta}
+      <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+      <p style="color: #666; font-size: 12px; margin: 0;">${ctx.appName}</p>
+    </div>
+  `.trim();
+}
+
+export function invitationCreatedTemplate(
+  ctx: InvitationNotificationContext
+): BookingNotificationContent {
+  const inviter = inviterDisplay(ctx);
+  const greeting = `Olá,`;
+  const intro = `${inviter} convidou-te para uma partida no ${ctx.court.name}, ${formatRange(
+    ctx.booking.startAt,
+    ctx.booking.endAt
+  )}. Confirma a tua presença na app.`;
+  const link = invitationLink(ctx);
+  const linkLine = link ? `\n\nResponde aqui: ${link}` : '';
+
+  return {
+    pushTitle: 'Foste convidado para uma partida',
+    pushBody: `${inviter} convidou-te para ${ctx.court.name} (${formatRange(
+      ctx.booking.startAt,
+      ctx.booking.endAt
+    )}).`,
+    emailSubject: `${inviter} convidou-te para uma partida`,
+    emailHtml: wrapInvitationEmail(
+      'Foste convidado para uma partida',
+      `<p>${greeting}</p><p>${intro}</p>${invitationDetailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${invitationDetailsText(ctx)}${linkLine}`,
+  };
+}
+
+export function invitationAcceptedTemplate(
+  ctx: InvitationNotificationContext,
+  guestName: string
+): BookingNotificationContent {
+  const greeting = `Olá ${inviterDisplay(ctx)},`;
+  const intro = `${guestName} aceitou o convite para a partida no ${ctx.court.name}.`;
+
+  return {
+    pushTitle: 'Convite aceite',
+    pushBody: `${guestName} vai à partida em ${ctx.court.name}.`,
+    emailSubject: `${guestName} aceitou o teu convite`,
+    emailHtml: wrapInvitationEmail(
+      'Convite aceite',
+      `<p>${greeting}</p><p>${intro}</p>${invitationDetailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${invitationDetailsText(ctx)}`,
+  };
+}
+
+export function invitationDeclinedTemplate(
+  ctx: InvitationNotificationContext,
+  guestName: string
+): BookingNotificationContent {
+  const greeting = `Olá ${inviterDisplay(ctx)},`;
+  const intro = `${guestName} não vai poder ir à partida no ${ctx.court.name}.`;
+
+  return {
+    pushTitle: 'Convite recusado',
+    pushBody: `${guestName} recusou o convite.`,
+    emailSubject: `${guestName} recusou o teu convite`,
+    emailHtml: wrapInvitationEmail(
+      'Convite recusado',
+      `<p>${greeting}</p><p>${intro}</p>${invitationDetailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${invitationDetailsText(ctx)}`,
   };
 }

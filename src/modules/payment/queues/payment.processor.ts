@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import {
@@ -82,6 +83,7 @@ export class PaymentProcessor {
     result: ChargeResult
   ): Promise<void> {
     let bookingId: string | null = null;
+    const createdInvitationIds: string[] = [];
 
     await this.db.$transaction(async tx => {
       const booking = await tx.booking.create({
@@ -136,6 +138,90 @@ export class PaymentProcessor {
         },
       });
 
+      const participantUserIds = Array.isArray(session.participantUserIds)
+        ? (session.participantUserIds as string[])
+        : [];
+      const inviteEmailsRaw = Array.isArray(session.inviteEmails)
+        ? (session.inviteEmails as string[])
+        : [];
+      const inviteEmails = inviteEmailsRaw
+        .filter(e => typeof e === 'string')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean);
+
+      const organizer = await tx.user.findUnique({
+        where: { id: session.organizerId },
+        select: { email: true },
+      });
+      const organizerEmail = organizer?.email?.toLowerCase() ?? null;
+
+      const usersByEmail = inviteEmails.length
+        ? await tx.user.findMany({
+            where: { email: { in: inviteEmails } },
+            select: { id: true, email: true },
+          })
+        : [];
+      const emailToUserId = new Map<string, string>();
+      for (const u of usersByEmail) {
+        emailToUserId.set(u.email.toLowerCase(), u.id);
+      }
+
+      const userIdSet = new Set<string>();
+      for (const id of participantUserIds) {
+        if (typeof id === 'string' && id && id !== session.organizerId) {
+          userIdSet.add(id);
+        }
+      }
+      for (const email of inviteEmails) {
+        if (email === organizerEmail) continue;
+        const linked = emailToUserId.get(email);
+        if (linked && linked !== session.organizerId) userIdSet.add(linked);
+      }
+
+      for (const userId of userIdSet) {
+        await tx.bookingParticipant.create({
+          data: {
+            bookingId: booking.id,
+            userId,
+            status: ParticipantStatus.INVITED,
+            isOrganizer: false,
+          },
+        });
+        const invitation = await tx.bookingInvitation.create({
+          data: {
+            bookingId: booking.id,
+            inviterUserId: session.organizerId,
+            invitedUserId: userId,
+            token: randomUUID(),
+            expiresAt: booking.startAt,
+          },
+          select: { id: true },
+        });
+        createdInvitationIds.push(invitation.id);
+      }
+
+      const emailsWithoutUser = Array.from(
+        new Set(
+          inviteEmails.filter(
+            e => e !== organizerEmail && !emailToUserId.has(e)
+          )
+        )
+      );
+
+      for (const email of emailsWithoutUser) {
+        const invitation = await tx.bookingInvitation.create({
+          data: {
+            bookingId: booking.id,
+            inviterUserId: session.organizerId,
+            inviteeEmail: email,
+            token: randomUUID(),
+            expiresAt: booking.startAt,
+          },
+          select: { id: true },
+        });
+        createdInvitationIds.push(invitation.id);
+      }
+
       await tx.bookingCheckoutSession.update({
         where: { id: session.id },
         data: {
@@ -148,11 +234,15 @@ export class PaymentProcessor {
     });
 
     this.logger.log(
-      `Session ${session.id} completed (${result.providerStatusCode}) - booking ${bookingId} CONFIRMED`
+      `Session ${session.id} completed (${result.providerStatusCode}) - booking ${bookingId} CONFIRMED with ${createdInvitationIds.length} invitation(s)`
     );
 
     if (bookingId) {
       await this.bookingNotifier.notifyPaymentConfirmed(bookingId);
+    }
+
+    for (const invitationId of createdInvitationIds) {
+      await this.bookingNotifier.notifyInvitationCreated(invitationId);
     }
   }
 

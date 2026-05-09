@@ -18,9 +18,15 @@ import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated
 import {
   BookingCancelRequestDto,
   BookingCreateRequestDto,
+  BookingInvitationRespondDto,
+  BookingInvitationTokenRespondDto,
   BookingMeQueryRequestDto,
 } from '../dtos/request/booking.request';
 import { BookingCheckoutSessionResponseDto } from '../dtos/response/booking.checkout.response';
+import {
+  BookingInvitationPreviewResponseDto,
+  BookingInvitationRespondResponseDto,
+} from '../dtos/response/booking.invitation.response';
 import { BookingResponseDto } from '../dtos/response/booking.response';
 import { BookingService } from '../services/booking.service';
 

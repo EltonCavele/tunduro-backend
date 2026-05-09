@@ -4,6 +4,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -202,3 +203,26 @@ export class BookingAdminCancelRequestDto {
 }
 
 export class BookingAdminCheckInRequestDto {}
+
+export class BookingInvitationRespondDto {
+  @ApiProperty({
+    example: true,
+    description: 'true para aceitar o convite, false para recusar',
+  })
+  @IsBoolean()
+  accept: boolean;
+}
+
+export class BookingInvitationTokenRespondDto {
+  @ApiProperty({
+    example: '7d5b3c12-...-token',
+    description: 'Token único da BookingInvitation',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  accept: boolean;
+}
