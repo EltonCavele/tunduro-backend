@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ParticipantStatus } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { HelperNotificationService } from 'src/common/helper/services/helper.notification.service';
@@ -10,7 +11,9 @@ import {
   CheckoutSessionNotificationContext,
   bookingCancelledByAdminTemplate,
   bookingCreatedByAdminTemplate,
+  bookingEndingSoonTemplate,
   bookingExpiredTemplate,
+  bookingStartingSoonTemplate,
   checkInTemplate,
   checkoutCreatedByAdminTemplate,
   checkoutExpiredTemplate,
@@ -19,13 +22,14 @@ import {
   paymentFailedTemplate,
 } from '../templates/booking.templates';
 
-interface OrganizerSummary {
+interface RecipientSummary {
   id: string;
   email: string;
   firstName: string | null;
   expoPushToken: string | null;
   notifyPush: boolean;
   notifyEmail: boolean;
+  isOrganizer: boolean;
 }
 
 @Injectable()
@@ -74,6 +78,18 @@ export class BookingNotifierService {
     await this.dispatchBooking(bookingId, ctx => checkInTemplate(ctx));
   }
 
+  async notifyBookingStartingSoon(bookingId: string): Promise<void> {
+    await this.dispatchBooking(bookingId, ctx =>
+      bookingStartingSoonTemplate(ctx)
+    );
+  }
+
+  async notifyBookingEndingSoon(bookingId: string): Promise<void> {
+    await this.dispatchBooking(bookingId, ctx =>
+      bookingEndingSoonTemplate(ctx)
+    );
+  }
+
   async notifyCheckoutCreatedByAdmin(sessionId: string): Promise<void> {
     await this.dispatchSession(sessionId, ctx =>
       checkoutCreatedByAdminTemplate(ctx)
@@ -102,10 +118,13 @@ export class BookingNotifierService {
       if (!ctx) return;
 
       const content = build(ctx.notificationContext);
-      await this.send(content, ctx.organizer, {
-        type: 'booking',
-        bookingId,
-      });
+
+      for (const recipient of ctx.recipients) {
+        await this.send(content, recipient, {
+          type: 'booking',
+          bookingId,
+        });
+      }
     } catch (error) {
       this.logger.warn(
         `Failed to dispatch notification for booking ${bookingId}: ${
@@ -141,19 +160,19 @@ export class BookingNotifierService {
 
   private async send(
     content: BookingNotificationContent,
-    organizer: OrganizerSummary,
+    recipient: RecipientSummary,
     data: Record<string, string>
   ): Promise<void> {
     const pushAllowed =
-      organizer.notifyPush && Boolean(organizer.expoPushToken);
-    const emailAllowed = organizer.notifyEmail && Boolean(organizer.email);
+      recipient.notifyPush && Boolean(recipient.expoPushToken);
+    const emailAllowed = recipient.notifyEmail && Boolean(recipient.email);
 
     const tasks: Promise<unknown>[] = [];
 
     if (pushAllowed) {
       tasks.push(
         this.notificationService.sendPush({
-          to: organizer.expoPushToken!,
+          to: recipient.expoPushToken!,
           title: content.pushTitle,
           body: content.pushBody,
           data,
@@ -164,7 +183,7 @@ export class BookingNotifierService {
     if (emailAllowed) {
       tasks.push(
         this.notificationService.sendEmail({
-          to: organizer.email,
+          to: recipient.email,
           subject: content.emailSubject,
           html: content.emailHtml,
           text: content.emailText,
@@ -174,7 +193,7 @@ export class BookingNotifierService {
 
     if (tasks.length === 0) {
       this.logger.debug(
-        `No notification channels enabled for organizer ${organizer.id}`
+        `No notification channels enabled for recipient ${recipient.id}`
       );
       return;
     }
@@ -183,7 +202,7 @@ export class BookingNotifierService {
     results.forEach((result, idx) => {
       if (result.status === 'rejected') {
         this.logger.warn(
-          `Notification channel ${idx} failed: ${
+          `Notification channel ${idx} failed for recipient ${recipient.id}: ${
             (result.reason as Error)?.message ?? 'unknown'
           }`
         );
@@ -193,7 +212,7 @@ export class BookingNotifierService {
 
   private async loadBookingContext(bookingId: string): Promise<{
     notificationContext: BookingNotificationContext;
-    organizer: OrganizerSummary;
+    recipients: RecipientSummary[];
   } | null> {
     const booking = await this.db.booking.findUnique({
       where: { id: bookingId },
@@ -209,6 +228,21 @@ export class BookingNotifierService {
             notifyEmail: true,
           },
         },
+        participants: {
+          where: { status: ParticipantStatus.ACCEPTED },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                expoPushToken: true,
+                notifyPush: true,
+                notifyEmail: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -219,6 +253,20 @@ export class BookingNotifierService {
 
     const appName = this.configService.get<string>('app.name') ?? 'Tunduro';
     const frontendUrl = this.configService.get<string>('app.frontendUrl');
+
+    const recipientsById = new Map<string, RecipientSummary>();
+    recipientsById.set(booking.organizer.id, {
+      ...booking.organizer,
+      isOrganizer: true,
+    });
+
+    for (const participant of booking.participants) {
+      if (recipientsById.has(participant.user.id)) continue;
+      recipientsById.set(participant.user.id, {
+        ...participant.user,
+        isOrganizer: false,
+      });
+    }
 
     return {
       notificationContext: {
@@ -238,13 +286,13 @@ export class BookingNotifierService {
         appName,
         frontendUrl: frontendUrl || undefined,
       },
-      organizer: booking.organizer,
+      recipients: Array.from(recipientsById.values()),
     };
   }
 
   private async loadSessionContext(sessionId: string): Promise<{
     notificationContext: CheckoutSessionNotificationContext;
-    organizer: OrganizerSummary;
+    organizer: RecipientSummary;
   } | null> {
     const session = await this.db.bookingCheckoutSession.findUnique({
       where: { id: sessionId },
@@ -291,7 +339,7 @@ export class BookingNotifierService {
         appName,
         frontendUrl: frontendUrl || undefined,
       },
-      organizer: session.organizer,
+      organizer: { ...session.organizer, isOrganizer: true },
     };
   }
 }

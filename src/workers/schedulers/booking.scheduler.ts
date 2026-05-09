@@ -19,5 +19,13 @@ export class BookingScheduler {
         `Expired ${expired} checkout session(s) (payment timeout).`
       );
     }
+
+    const reminders = await this.bookingService.dispatchUpcomingReminders();
+    if (reminders.start > 0) {
+      this.logger.log(`Sent ${reminders.start} start reminder(s) (10min).`);
+    }
+    if (reminders.end > 0) {
+      this.logger.log(`Sent ${reminders.end} end reminder(s) (10min).`);
+    }
   }
 }

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpStatus, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -132,5 +140,16 @@ export class UserPublicController {
     @Body() payload: UserExpoPushTokenUpdateDto
   ): Promise<UserExpoPushTokenResponseDto> {
     return this.userService.updateExpoPushToken(user.userId, payload);
+  }
+
+  @Post('notification-preferences/test-push')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Smoke-test do push notification (ignora flag notifyPush)',
+    description:
+      'Envia uma notificação directa ao expoPushToken do user autenticado. Devolve diagnóstico (config Expo, presença de token, resultado do envio).',
+  })
+  public async testPush(@AuthUser() user: IAuthUser): Promise<unknown> {
+    return this.userService.sendTestPush(user.userId);
   }
 }

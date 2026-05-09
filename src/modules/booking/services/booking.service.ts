@@ -431,6 +431,73 @@ export class BookingService {
     return count;
   }
 
+  /**
+   * Cron: dispara push/email para reservas CONFIRMED cuja janela de 10min
+   * antes de start/end caiu na janela de 9-11min (tolerância para atraso do
+   * cron). Marca *ReminderSentAt para garantir idempotência.
+   */
+  async dispatchUpcomingReminders(): Promise<{ start: number; end: number }> {
+    const now = new Date();
+    const lower = new Date(now.getTime() + 9 * 60_000);
+    const upper = new Date(now.getTime() + 11 * 60_000);
+
+    const startCandidates = await this.db.booking.findMany({
+      where: {
+        status: BookingStatus.CONFIRMED,
+        startAt: { gte: lower, lte: upper },
+        startReminderSentAt: null,
+      },
+      select: { id: true },
+    });
+
+    let startCount = 0;
+    for (const b of startCandidates) {
+      try {
+        await this.bookingNotifier.notifyBookingStartingSoon(b.id);
+        await this.db.booking.update({
+          where: { id: b.id },
+          data: { startReminderSentAt: new Date() },
+        });
+        startCount += 1;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send start reminder for booking ${b.id}: ${
+            (error as Error)?.message ?? 'unknown'
+          }`
+        );
+      }
+    }
+
+    const endCandidates = await this.db.booking.findMany({
+      where: {
+        status: BookingStatus.CONFIRMED,
+        endAt: { gte: lower, lte: upper },
+        endReminderSentAt: null,
+      },
+      select: { id: true },
+    });
+
+    let endCount = 0;
+    for (const b of endCandidates) {
+      try {
+        await this.bookingNotifier.notifyBookingEndingSoon(b.id);
+        await this.db.booking.update({
+          where: { id: b.id },
+          data: { endReminderSentAt: new Date() },
+        });
+        endCount += 1;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send end reminder for booking ${b.id}: ${
+            (error as Error)?.message ?? 'unknown'
+          }`
+        );
+      }
+    }
+
+    return { start: startCount, end: endCount };
+  }
+
   private async startCheckout(args: {
     organizerId: string;
     dto: BookingCreateRequestDto;

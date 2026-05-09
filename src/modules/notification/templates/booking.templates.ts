@@ -245,6 +245,46 @@ export function checkInTemplate(
   };
 }
 
+export function bookingStartingSoonTemplate(
+  ctx: BookingNotificationContext
+): BookingNotificationContent {
+  const greeting = `Olá ${safeName(ctx.organizer)},`;
+  const startTime = timeFormatter.format(ctx.booking.startAt);
+  const intro = `A sua reserva no ${ctx.court.name} começa às ${startTime}. Está a caminho?`;
+
+  return {
+    pushTitle: 'A sua reserva começa em 10 minutos',
+    pushBody: `${ctx.court.name} às ${startTime}. Não chegues atrasado!`,
+    emailSubject: 'A sua reserva começa em 10 minutos',
+    emailHtml: wrapEmail(
+      'A sua reserva começa em 10 minutos',
+      `<p>${greeting}</p><p>${intro}</p>${detailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${detailsText(ctx)}`,
+  };
+}
+
+export function bookingEndingSoonTemplate(
+  ctx: BookingNotificationContext
+): BookingNotificationContent {
+  const greeting = `Olá ${safeName(ctx.organizer)},`;
+  const endTime = timeFormatter.format(ctx.booking.endAt);
+  const intro = `A sua reserva no ${ctx.court.name} termina às ${endTime}. Boa reta final!`;
+
+  return {
+    pushTitle: 'A sua reserva termina em 10 minutos',
+    pushBody: `Reta final em ${ctx.court.name}. Termina às ${endTime}.`,
+    emailSubject: 'A sua reserva termina em 10 minutos',
+    emailHtml: wrapEmail(
+      'A sua reserva termina em 10 minutos',
+      `<p>${greeting}</p><p>${intro}</p>${detailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${detailsText(ctx)}`,
+  };
+}
+
 function sessionLink(ctx: CheckoutSessionNotificationContext): string | null {
   if (!ctx.frontendUrl) return null;
   const base = ctx.frontendUrl.replace(/\/+$/, '');

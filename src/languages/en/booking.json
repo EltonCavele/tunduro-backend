@@ -19,7 +19,9 @@
   },
   "notification": {
     "dispatched": "Booking notification dispatched",
-    "failed": "Booking notification failed"
+    "failed": "Booking notification failed",
+    "startingSoon": "Your booking starts in 10 minutes",
+    "endingSoon": "Your booking ends in 10 minutes"
   },
   "error": {
     "notFound": "Booking not found",

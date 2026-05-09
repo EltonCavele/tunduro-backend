@@ -327,6 +327,56 @@ export class UserService implements IUserService {
     return { expoPushToken: updated.expoPushToken as string };
   }
 
+  /**
+   * Smoke test do push: envia uma notificação para o expoPushToken do user
+   * autenticado, ignorando a flag notifyPush. Útil para diagnosticar
+   * config Expo / token inválido sem ter de gerar um booking.
+   */
+  async sendTestPush(userId: string): Promise<{
+    pushEnabled: boolean;
+    hasExpoPushToken: boolean;
+    notifyPush: boolean;
+    dispatch: {
+      success: boolean;
+      provider: string;
+      error?: string;
+      details?: Record<string, unknown>;
+    } | null;
+  }> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+
+    const pushEnabled = this.helperNotificationService.isPushEnabled();
+    const hasExpoPushToken = Boolean(user.expoPushToken);
+
+    if (!hasExpoPushToken) {
+      return {
+        pushEnabled,
+        hasExpoPushToken,
+        notifyPush: user.notifyPush,
+        dispatch: null,
+      };
+    }
+
+    const dispatch = await this.helperNotificationService.sendPush({
+      to: user.expoPushToken!,
+      title: 'Push de teste',
+      body: 'Se vês isto, o push notification está a funcionar.',
+      data: { type: 'test', userId },
+    });
+
+    return {
+      pushEnabled,
+      hasExpoPushToken,
+      notifyPush: user.notifyPush,
+      dispatch,
+    };
+  }
+
   async deleteUser(userId: string): Promise<ApiGenericResponseDto> {
     try {
       const user = await this.databaseService.user.findUnique({

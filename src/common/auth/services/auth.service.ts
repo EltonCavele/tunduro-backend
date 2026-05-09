@@ -64,6 +64,19 @@ export class AuthService implements IAuthService {
       );
     }
 
+    if (!user.isVerified) {
+      const verificationOtp = await this.createOtp(
+        user.id,
+        this.VERIFY_OTP_PREFIX
+      );
+      await this.dispatchOtpNotification({
+        user,
+        otpCode: verificationOtp,
+        channel: 'EMAIL',
+        intent: 'verification',
+      });
+    }
+
     const tokens = await this.createTokensForUser(user);
 
     return {
