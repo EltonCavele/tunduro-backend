@@ -88,6 +88,75 @@ export class BookingPublicController {
     return this.bookingService.getMyBookings(user.userId, query);
   }
 
+  @Get('/bookings/invitations/:token')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Pré-visualizar um convite a partir do token',
+    description:
+      'Devolve detalhes do convite e da reserva. Útil para o app mobile mostrar o ecrã de aceitar/recusar antes de o user confirmar.',
+  })
+  @DocResponse({
+    serialization: BookingInvitationPreviewResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.details',
+  })
+  async getInvitationByToken(
+    @AuthUser() user: IAuthUser,
+    @Param('token') token: string
+  ): Promise<BookingInvitationPreviewResponseDto> {
+    return this.bookingService.getInvitationByToken(
+      user,
+      token
+    ) as unknown as BookingInvitationPreviewResponseDto;
+  }
+
+  @Post('/bookings/invitations/respond')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Responder a um convite via token (email/deep-link)',
+    description:
+      'Para users que receberam o convite por email ou deep-link. Valida que o user autenticado corresponde ao destinatário (id ou email do convite).',
+  })
+  @DocResponse({
+    serialization: BookingInvitationRespondResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationResponded',
+  })
+  async respondToInvitationByToken(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: BookingInvitationTokenRespondDto
+  ): Promise<BookingInvitationRespondResponseDto> {
+    return this.bookingService.respondToInvitationByToken(
+      user,
+      payload.token,
+      payload.accept
+    );
+  }
+
+  @Post('/bookings/:id/invitation/respond')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Responder ao convite de uma reserva (user já é participant)',
+    description:
+      'Aceita ou recusa um convite quando o user já tem um BookingParticipant INVITED para o booking.',
+  })
+  @DocResponse({
+    serialization: BookingInvitationRespondResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.invitationResponded',
+  })
+  async respondToInvitation(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingInvitationRespondDto
+  ): Promise<BookingInvitationRespondResponseDto> {
+    return this.bookingService.respondToInvitationAsUser(
+      user.userId,
+      bookingId,
+      payload.accept
+    );
+  }
+
   @Get('/bookings/:id')
   @ApiBearerAuth('accessToken')
   @DocResponse({

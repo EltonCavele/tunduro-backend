@@ -299,7 +299,10 @@ export class BookingService {
     });
 
     try {
-      await this.lightingOrchestratorService.activateByCheckIn(id, admin.userId);
+      await this.lightingOrchestratorService.activateByCheckIn(
+        id,
+        admin.userId
+      );
     } catch (error: any) {
       this.logger.warn(
         `Failed to activate lights on admin check-in for booking ${id}: ${
@@ -613,10 +616,7 @@ export class BookingService {
       throw new HttpException('booking.error.invalid', HttpStatus.CONFLICT);
     }
 
-    if (
-      invitation.invitedUserId &&
-      invitation.invitedUserId !== user.userId
-    ) {
+    if (invitation.invitedUserId && invitation.invitedUserId !== user.userId) {
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
     }
 
@@ -639,7 +639,10 @@ export class BookingService {
 
     const existingParticipant = await this.db.bookingParticipant.findUnique({
       where: {
-        bookingId_userId: { bookingId: invitation.bookingId, userId: user.userId },
+        bookingId_userId: {
+          bookingId: invitation.bookingId,
+          userId: user.userId,
+        },
       },
     });
 
@@ -789,12 +792,23 @@ export class BookingService {
       throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
     }
 
+    const participantCount =
+      (dto.participantUserIds?.length ?? 0) +
+      (dto.inviteEmails?.length ?? 0) +
+      1;
+    if (court.maxPlayers && participantCount > court.maxPlayers) {
+      throw new HttpException(
+        'booking.error.exceedsCourtCapacity',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
     await this.assertAvailable(court.id, start, end);
 
     const amount = Number(
       (Number(court.pricePerHour) * (duration / 60)).toFixed(2)
     );
-    const reference = `PAY-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const reference = `TUNDURO-${randomUUID().slice(0, 8).toUpperCase()}`;
     const expiresAt = new Date(
       Date.now() + this.getPaymentDeadlineMin() * 60000
     );
@@ -831,7 +845,9 @@ export class BookingService {
           (error as Error)?.message ?? 'unknown'
         }`
       );
-      await this.db.bookingCheckoutSession.delete({ where: { id: session.id } });
+      await this.db.bookingCheckoutSession.delete({
+        where: { id: session.id },
+      });
       throw new HttpException(
         'payment.error.gatewayUnavailable',
         HttpStatus.SERVICE_UNAVAILABLE
