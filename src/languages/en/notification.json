@@ -1,0 +1,10 @@
+{
+  "success": {
+    "list": "Notifications retrieved successfully",
+    "markedAsRead": "Notification marked as read successfully",
+    "deleted": "Notification deleted successfully"
+  },
+  "error": {
+    "notFound": "Notification not found"
+  }
+}

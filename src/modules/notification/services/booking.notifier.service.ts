@@ -25,6 +25,7 @@ import {
   paymentConfirmedTemplate,
   paymentFailedTemplate,
 } from '../templates/booking.templates';
+import { NotificationService } from './notification.service';
 
 interface RecipientSummary {
   id: string;
@@ -43,6 +44,7 @@ export class BookingNotifierService {
   constructor(
     private readonly db: DatabaseService,
     private readonly notificationService: HelperNotificationService,
+    private readonly notificationStore: NotificationService,
     private readonly configService: ConfigService
   ) {}
 
@@ -217,6 +219,21 @@ export class BookingNotifierService {
     recipient: RecipientSummary,
     data: Record<string, string>
   ): Promise<void> {
+    try {
+      await this.notificationStore.createForUser({
+        userId: recipient.id,
+        title: content.pushTitle,
+        body: content.pushBody,
+        data,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist in-app notification for recipient ${recipient.id}: ${
+          (error as Error)?.message ?? 'unknown'
+        }`
+      );
+    }
+
     const pushAllowed =
       recipient.notifyPush && Boolean(recipient.expoPushToken);
     const emailAllowed = recipient.notifyEmail && Boolean(recipient.email);

@@ -5,6 +5,7 @@ import { CommonModule } from 'src/common/common.module';
 import { BookingModule } from 'src/modules/booking/booking.module';
 import { CourtModule } from 'src/modules/court/court.module';
 import { LightingModule } from 'src/modules/lighting/lighting.module';
+import { NotificationModule } from 'src/modules/notification/notification.module';
 import { PaymentModule } from 'src/modules/payment/payment.module';
 import { ReportsModule } from 'src/modules/reports/reports.module';
 import { UserModule } from 'src/modules/user/user.module';
@@ -27,6 +28,7 @@ import { HealthController } from './controllers/health.controller';
     UserModule,
     CourtModule,
     BookingModule,
+    NotificationModule,
     LightingModule,
     PaymentModule,
     ReportsModule,

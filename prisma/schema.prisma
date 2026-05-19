@@ -138,6 +138,7 @@ model User {
   bookingParticipants     BookingParticipant[]
   sentInvitations         BookingInvitation[]      @relation("SentInvitations")
   receivedInvitations     BookingInvitation[]      @relation("ReceivedInvitations")
+  notifications           Notification[]
   paymentTransactions     PaymentTransaction[]
   waitlistEntries         WaitlistEntry[]
   courtRatings            CourtRating[]
@@ -466,4 +467,21 @@ model BookingCheckoutSession {
   @@index([status, expiresAt])
   @@index([refundId])
   @@map("booking_checkout_sessions")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
