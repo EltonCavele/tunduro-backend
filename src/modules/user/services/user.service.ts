@@ -12,6 +12,7 @@ import { HelperEncryptionService } from 'src/common/helper/services/helper.encry
 import { HelperNotificationService } from 'src/common/helper/services/helper.notification.service';
 
 import { UserAdminCreateDto } from '../dtos/request/user.admin-create.request';
+import { UserChangePasswordDto } from '../dtos/request/user.change-password.request';
 import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
@@ -306,6 +307,51 @@ export class UserService implements IUserService {
     });
 
     return this.getPreferencesFromUser(updatedUser);
+  }
+
+  async changePassword(
+    userId: string,
+    data: UserChangePasswordDto
+  ): Promise<ApiGenericResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+
+    const matched = await this.helperEncryptionService.match(
+      (user as { password: string }).password,
+      data.currentPassword
+    );
+    if (!matched) {
+      throw new HttpException(
+        'user.error.invalidCurrentPassword',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const sameAsOld = await this.helperEncryptionService.match(
+      (user as { password: string }).password,
+      data.newPassword
+    );
+    if (sameAsOld) {
+      throw new HttpException(
+        'user.error.passwordSameAsOld',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const hashed = await this.helperEncryptionService.createHash(
+      data.newPassword
+    );
+
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: { password: hashed } as any,
+    });
+
+    return ApiGenericResponseDto.success('user.success.passwordChanged');
   }
 
   async updateExpoPushToken(

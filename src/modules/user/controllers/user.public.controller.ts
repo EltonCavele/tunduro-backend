@@ -15,7 +15,9 @@ import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
 import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
+import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 
+import { UserChangePasswordDto } from '../dtos/request/user.change-password.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import {
@@ -110,6 +112,21 @@ export class UserPublicController {
     @Body() payload: UserUpdateDto
   ): Promise<UserUpdateProfileResponseDto> {
     return this.userService.updateUser(user.userId, payload);
+  }
+
+  @Put('password')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Change the logged-in user password' })
+  @DocResponse({
+    serialization: ApiGenericResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.passwordChanged',
+  })
+  public async changePassword(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: UserChangePasswordDto
+  ): Promise<ApiGenericResponseDto> {
+    return this.userService.changePassword(user.userId, payload);
   }
 
   @Put('notification-preferences')
