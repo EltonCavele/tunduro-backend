@@ -99,3 +99,68 @@ export class PaymentReportResponseDto {
   @Transform(toNumber)
   averageTicket: number;
 }
+
+export class StatisticsSummaryDto {
+  @ApiProperty() @Expose() @Transform(toNumber) totalBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) confirmedBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) cancelledBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) pendingBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) noShowBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) completedBookings: number;
+  @ApiProperty() @Expose() @Transform(toNumber) activeCourts: number;
+  @ApiProperty() @Expose() @Transform(toNumber) totalCourts: number;
+  @ApiProperty() @Expose() @Transform(toNumber) totalUsers: number;
+  @ApiProperty() @Expose() @Transform(toNumber) totalRevenue: number;
+  @ApiProperty() @Expose() @Transform(toNumber) paymentsCount: number;
+}
+
+export class StatisticsMonthlyDto {
+  @ApiProperty({ example: '2026-01' }) @Expose() month: string;
+  @ApiProperty() @Expose() @Transform(toNumber) reserved: number;
+  @ApiProperty() @Expose() @Transform(toNumber) cancelled: number;
+  @ApiProperty() @Expose() @Transform(toNumber) revenue: number;
+}
+
+export class StatisticsResponseDto {
+  @ApiProperty({ type: StatisticsSummaryDto })
+  @Expose()
+  summary: StatisticsSummaryDto;
+
+  @ApiProperty({ type: [StatisticsMonthlyDto] })
+  @Expose()
+  monthly: StatisticsMonthlyDto[];
+
+  @ApiProperty({ example: '2025-06-01' })
+  @Expose()
+  startDate: string;
+
+  @ApiProperty({ example: '2026-06-30' })
+  @Expose()
+  endDate: string;
+}
+
+export class ExportReportResponseDto {
+  @ApiProperty({ type: GeneralReportResponseDto })
+  @Expose()
+  general: GeneralReportResponseDto;
+
+  @ApiProperty({ type: ScheduleReportResponseDto })
+  @Expose()
+  schedule: ScheduleReportResponseDto;
+
+  @ApiProperty({ type: PaymentReportResponseDto })
+  @Expose()
+  payment: PaymentReportResponseDto;
+
+  @ApiProperty({ example: '2026-01-01' })
+  @Expose()
+  startDate: string;
+
+  @ApiProperty({ example: '2026-12-31' })
+  @Expose()
+  endDate: string;
+
+  @ApiProperty({ example: '2026-06-06T10:00:00.000Z' })
+  @Expose()
+  generatedAt: string;
+}

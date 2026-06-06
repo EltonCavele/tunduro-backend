@@ -4,10 +4,14 @@ import { DatabaseService } from 'src/common/database/services/database.service';
 import { AnalyticsQueryDto } from '../dtos/request/analytics.request';
 import { DateRangeQueryDto } from '../dtos/request/report.request';
 import { AnalyticsResponseDto } from '../dtos/response/analytics.response';
+import { eachMonthOfInterval } from 'date-fns';
+
 import {
+  ExportReportResponseDto,
   GeneralReportResponseDto,
   PaymentReportResponseDto,
   ScheduleReportResponseDto,
+  StatisticsResponseDto,
 } from '../dtos/response/report.response';
 
 @Injectable()
@@ -106,7 +110,7 @@ export class ReportsService {
       ? new Date(query.startDate)
       : new Date(new Date().getFullYear(), 0, 1);
     const endDate = query.endDate
-      ? new Date(query.endDate)
+      ? new Date(query.endDate + 'T23:59:59')
       : new Date(new Date().getFullYear(), 11, 31, 23, 59, 59);
 
     const [totalUsers, newUsers, totalBookings, revenueResult, occupancyResult, cancellations] =
@@ -175,7 +179,7 @@ export class ReportsService {
       ? new Date(query.startDate)
       : new Date(new Date().getFullYear(), 0, 1);
     const endDate = query.endDate
-      ? new Date(query.endDate)
+      ? new Date(query.endDate + 'T23:59:59')
       : new Date(new Date().getFullYear(), 11, 31, 23, 59, 59);
 
     const [pending, confirmed, courtCounts, userCounts, noShows, totalBookings] =
@@ -267,7 +271,7 @@ export class ReportsService {
       ? new Date(query.startDate)
       : new Date(new Date().getFullYear(), 0, 1);
     const endDate = query.endDate
-      ? new Date(query.endDate)
+      ? new Date(query.endDate + 'T23:59:59')
       : new Date(new Date().getFullYear(), 11, 31, 23, 59, 59);
 
     const [completedPayments, courtRevenues, refunds, totalCompleted] =
@@ -345,6 +349,124 @@ export class ReportsService {
       courtRevenues: courtRevenueList,
       totalRefunds: refunds,
       averageTicket: Math.round(averageTicket * 100) / 100,
+    };
+  }
+
+  /**
+   * Consolidated report payload for a single-call rich export (PDF, etc.).
+   * Aggregates the general, schedule and payment reports plus range metadata.
+   */
+  async getExportReport(
+    query: DateRangeQueryDto
+  ): Promise<ExportReportResponseDto> {
+    const [general, schedule, payment] = await Promise.all([
+      this.getGeneralReport(query),
+      this.getScheduleReport(query),
+      this.getPaymentReport(query),
+    ]);
+
+    const now = new Date();
+    const startDate =
+      query.startDate ?? new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
+    const endDate =
+      query.endDate ?? new Date(now.getFullYear(), 11, 31).toISOString().slice(0, 10);
+
+    return {
+      general,
+      schedule,
+      payment,
+      startDate,
+      endDate,
+      generatedAt: now.toISOString(),
+    };
+  }
+
+  /**
+   * Statistics screen data: status summary + monthly reserved/cancelled/revenue
+   * series across the selected range (defaults to the last 12 months).
+   */
+  async getStatistics(
+    query: DateRangeQueryDto
+  ): Promise<StatisticsResponseDto> {
+    const now = new Date();
+    const start = query.startDate
+      ? new Date(query.startDate)
+      : new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const end = query.endDate
+      ? new Date(query.endDate + 'T23:59:59')
+      : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const [bookings, completedPayments, totalCourts, activeCourts, totalUsers] =
+      await Promise.all([
+        this.db.booking.findMany({
+          where: { startAt: { gte: start, lte: end } },
+          select: { id: true, startAt: true, status: true },
+        }),
+        this.db.paymentTransaction.findMany({
+          where: {
+            status: 'COMPLETED' as any,
+            processedAt: { gte: start, lte: end },
+          },
+          select: { amount: true, processedAt: true },
+        }),
+        this.db.court.count({ where: { deletedAt: null } }),
+        this.db.court.count({ where: { deletedAt: null, isActive: true } }),
+        this.db.user.count({ where: { deletedAt: null } }),
+      ]);
+
+    const countStatus = (status: string) =>
+      bookings.filter((b) => (b.status as unknown as string) === status).length;
+
+    const totalRevenue = completedPayments.reduce(
+      (sum, p) => sum + Number(p.amount),
+      0
+    );
+
+    const months = eachMonthOfInterval({
+      start: new Date(start.getFullYear(), start.getMonth(), 1),
+      end,
+    });
+
+    const sameMonth = (d: Date | null | undefined, m: Date) =>
+      !!d && d.getFullYear() === m.getFullYear() && d.getMonth() === m.getMonth();
+
+    const monthly = months.map((m) => {
+      const key = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
+      const monthBookings = bookings.filter((b) => sameMonth(b.startAt, m));
+      const reserved = monthBookings.filter(
+        (b) => (b.status as unknown as string) !== 'CANCELLED'
+      ).length;
+      const cancelled = monthBookings.filter(
+        (b) => (b.status as unknown as string) === 'CANCELLED'
+      ).length;
+      const revenue = completedPayments
+        .filter((p) => sameMonth(p.processedAt, m))
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      return {
+        month: key,
+        reserved,
+        cancelled,
+        revenue: Math.round(revenue * 100) / 100,
+      };
+    });
+
+    return {
+      summary: {
+        totalBookings: bookings.length,
+        confirmedBookings: countStatus('CONFIRMED'),
+        cancelledBookings: countStatus('CANCELLED'),
+        pendingBookings: countStatus('PENDING'),
+        noShowBookings: countStatus('NO_SHOW'),
+        completedBookings: countStatus('COMPLETED'),
+        activeCourts,
+        totalCourts,
+        totalUsers,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        paymentsCount: completedPayments.length,
+      },
+      monthly,
+      startDate: query.startDate ?? start.toISOString().slice(0, 10),
+      endDate: query.endDate ?? end.toISOString().slice(0, 10),
     };
   }
 }

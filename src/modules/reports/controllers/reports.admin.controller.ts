@@ -10,9 +10,11 @@ import { AnalyticsQueryDto } from '../dtos/request/analytics.request';
 import { DateRangeQueryDto } from '../dtos/request/report.request';
 import { AnalyticsResponseDto } from '../dtos/response/analytics.response';
 import {
+  ExportReportResponseDto,
   GeneralReportResponseDto,
   PaymentReportResponseDto,
   ScheduleReportResponseDto,
+  StatisticsResponseDto,
 } from '../dtos/response/report.response';
 
 @ApiTags('admin.reports')
@@ -81,5 +83,35 @@ export class ReportsAdminController {
     @Query() query: DateRangeQueryDto
   ): Promise<PaymentReportResponseDto> {
     return this.reportsService.getPaymentReport(query);
+  }
+
+  @Get('reports/export')
+  @AllowedRoles([Role.ADMIN])
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get consolidated report for export (PDF)' })
+  @DocResponse({
+    serialization: ExportReportResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'reports.success.export',
+  })
+  async getExportReport(
+    @Query() query: DateRangeQueryDto
+  ): Promise<ExportReportResponseDto> {
+    return this.reportsService.getExportReport(query);
+  }
+
+  @Get('reports/statistics')
+  @AllowedRoles([Role.ADMIN])
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get statistics screen data' })
+  @DocResponse({
+    serialization: StatisticsResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'reports.success.statistics',
+  })
+  async getStatistics(
+    @Query() query: DateRangeQueryDto
+  ): Promise<StatisticsResponseDto> {
+    return this.reportsService.getStatistics(query);
   }
 }
