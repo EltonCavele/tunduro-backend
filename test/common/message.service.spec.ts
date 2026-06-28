@@ -96,7 +96,7 @@ describe('MessageService', () => {
             service.translate(key);
 
             expect(mockI18nService.translate).toHaveBeenCalledWith(key, {
-                lang: 'en',
+                lang: 'pt',
                 args: {},
                 defaultValue: key,
             });
@@ -337,7 +337,7 @@ describe('MessageService', () => {
 
             const result = service.getCurrentLanguage();
 
-            expect(result).toBe('en');
+            expect(result).toBe('pt');
         });
 
         it('should return fallback language when context throws error', () => {
@@ -347,7 +347,7 @@ describe('MessageService', () => {
 
             const result = service.getCurrentLanguage();
 
-            expect(result).toBe('en');
+            expect(result).toBe('pt');
         });
 
         it('should return fallback language when context.lang is undefined', () => {
@@ -355,7 +355,7 @@ describe('MessageService', () => {
 
             const result = service.getCurrentLanguage();
 
-            expect(result).toBe('en');
+            expect(result).toBe('pt');
         });
     });
 });

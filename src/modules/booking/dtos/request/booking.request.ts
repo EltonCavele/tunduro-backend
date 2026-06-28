@@ -14,6 +14,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class BookingAdminCreateRequestDto {
@@ -35,13 +36,14 @@ export class BookingAdminCreateRequestDto {
   @IsString()
   endAt: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '258841234567',
-    description: 'MSISDN do cliente para o débito M-Pesa (formato 258XXXXXXXXX)',
+    description: 'Obrigatório quando paymentMethod=MPESA',
   })
+  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional({
     enum: PaymentMethod,
@@ -51,6 +53,11 @@ export class BookingAdminCreateRequestDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  lightingRequested?: boolean;
 
   @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
   @IsOptional()
@@ -87,13 +94,14 @@ export class BookingCreateRequestDto {
   @IsString()
   endAt: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '258841234567',
-    description: 'MSISDN para o débito M-Pesa (formato 258XXXXXXXXX)',
+    description: 'Obrigatório quando paymentMethod=MPESA',
   })
+  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional({
     enum: PaymentMethod,
@@ -103,6 +111,11 @@ export class BookingCreateRequestDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  lightingRequested?: boolean;
 
   @ApiPropertyOptional({ type: [String], example: ['user-id-1'] })
   @IsOptional()
@@ -211,6 +224,26 @@ export class BookingInvitationRespondDto {
   })
   @IsBoolean()
   accept: boolean;
+}
+
+export class BookingExtendRequestDto {
+  @ApiPropertyOptional({
+    example: '258841234567',
+    description: 'Obrigatório quando paymentMethod=MPESA',
+  })
+  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
+  @IsString()
+  @IsNotEmpty()
+  phone?: string;
+
+  @ApiPropertyOptional({
+    enum: PaymentMethod,
+    example: PaymentMethod.MPESA,
+    description: 'Método de pagamento; só MPESA é suportado de momento',
+  })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }
 
 export class BookingInvitationTokenRespondDto {

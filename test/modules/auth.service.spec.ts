@@ -84,7 +84,7 @@ describe('AuthService', () => {
       ).rejects.toThrow(HttpException);
     });
 
-    it('should throw NOT_FOUND when user does not exist', async () => {
+    it('should throw UNAUTHORIZED when user does not exist', async () => {
       mockDatabaseService.user.findFirst.mockResolvedValue(null);
 
       try {
@@ -95,8 +95,8 @@ describe('AuthService', () => {
         fail('Expected login to throw');
       } catch (error) {
         expect(error).toBeInstanceOf(HttpException);
-        expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
-        expect(error.message).toBe('user.error.userNotFound');
+        expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+        expect(error.message).toBe('auth.error.invalidCredentials');
       }
 
       expect(mockDatabaseService.user.findFirst).toHaveBeenCalledWith({
@@ -107,7 +107,7 @@ describe('AuthService', () => {
       });
     });
 
-    it('should throw BAD_REQUEST when password does not match', async () => {
+    it('should throw UNAUTHORIZED when password does not match', async () => {
       const user = {
         id: 'user-id',
         email: 'john@example.com',
@@ -126,8 +126,8 @@ describe('AuthService', () => {
         fail('Expected login to throw');
       } catch (error) {
         expect(error).toBeInstanceOf(HttpException);
-        expect(error.getStatus()).toBe(HttpStatus.BAD_REQUEST);
-        expect(error.message).toBe('auth.error.invalidPassword');
+        expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+        expect(error.message).toBe('auth.error.invalidCredentials');
       }
 
       expect(mockEncryptionService.match).toHaveBeenCalledWith(
@@ -143,6 +143,7 @@ describe('AuthService', () => {
         password: 'hashed-password',
         role: Role.USER,
         tokenVersion: 3,
+        isVerified: true,
       };
       const tokens = {
         accessToken: 'access-token',
@@ -176,6 +177,7 @@ describe('AuthService', () => {
         password: 'hashed-password',
         role: Role.USER,
         tokenVersion: 1,
+        isVerified: true,
       };
       mockDatabaseService.user.findFirst.mockResolvedValue(user);
       mockEncryptionService.match.mockResolvedValue(true);

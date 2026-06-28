@@ -7,30 +7,30 @@ import {
 } from '../interfaces/message.interface';
 
 /**
- * MessageService - Central service for handling all i18n translations
+ * MessageService - Servico central para todas as traducoes i18n.
  *
- * This service provides a streamlined API for translating messages throughout the application.
- * It automatically handles language resolution from the request context and provides
- * type-safe translation methods.
+ * Este servico oferece uma API simples para traduzir mensagens na aplicacao.
+ * Ele resolve automaticamente o idioma a partir do contexto da requisicao e
+ * disponibiliza metodos de traducao com tipagem.
  *
  * @example
- * // Simple translation
+ * // Traducao simples
  * const message = messageService.translate('user.created');
  *
  * @example
- * // Translation with arguments
+ * // Traducao com argumentos
  * const message = messageService.translate('user.welcome', {
  *   args: { name: 'John' }
  * });
  *
  * @example
- * // Translation with specific language
+ * // Traducao com idioma especifico
  * const message = messageService.translate('user.created', {
- *   lang: 'es'
+ *   lang: 'pt'
  * });
  *
  * @example
- * // Bulk translations
+ * // Traducoes em lote
  * const messages = messageService.translateBulk([
  *   { key: 'user.created' },
  *   { key: 'user.updated', args: { name: 'John' } }
@@ -38,16 +38,16 @@ import {
  */
 @Injectable()
 export class MessageService {
-    private readonly fallbackLanguage = 'en';
+    private readonly fallbackLanguage = 'pt';
 
     constructor(private readonly i18nService: I18nService) {}
 
     /**
-     * Translate a single message key
+     * Traduz uma unica chave de mensagem.
      *
-     * @param key - Translation key (e.g., 'user.created', 'http.error.404')
-     * @param options - Translation options (language, arguments, default value)
-     * @returns Translated message
+     * @param key - Chave de traducao (ex.: 'user.created', 'http.error.404')
+     * @param options - Opcoes de traducao (idioma, argumentos, valor padrao)
+     * @returns Mensagem traduzida
      */
     translate(key: string, options?: ITranslateOptions): string {
         const lang = this.resolveLanguage(options?.lang);
@@ -64,19 +64,19 @@ export class MessageService {
     }
 
     /**
-     * Translate multiple messages in a single call
-     * More efficient than calling translate() multiple times
+     * Traduz varias mensagens em uma unica chamada.
+     * Mais eficiente do que chamar translate() varias vezes.
      *
-     * @param items - Array of translation items
-     * @param lang - Optional language override for all items
-     * @returns Array of translated messages in the same order
+     * @param items - Lista de itens de traducao
+     * @param lang - Sobrescrita opcional de idioma para todos os itens
+     * @returns Lista de mensagens traduzidas na mesma ordem
      *
      * @example
      * const messages = messageService.translateBulk([
      *   { key: 'user.created' },
      *   { key: 'user.updated', args: { name: 'John' } },
-     *   { key: 'user.deleted', defaultValue: 'User removed' }
-     * ], 'es');
+     *   { key: 'user.deleted', defaultValue: 'Usuario removido' }
+     * ], 'pt');
      */
     translateBulk(items: ITranslateItem[], lang?: string): string[] {
         const resolvedLang = this.resolveLanguage(lang);
@@ -91,21 +91,21 @@ export class MessageService {
     }
 
     /**
-     * Build and translate a key with dynamic parts
-     * Useful for structured translation keys like 'http.error.404'
+     * Monta e traduz uma chave com partes dinamicas.
+     * Util para chaves estruturadas como 'http.error.404'.
      *
-     * @param parts - Array of key parts to join with dots
-     * @param options - Translation options
-     * @returns Translated message
+     * @param parts - Partes da chave que serao unidas por pontos
+     * @param options - Opcoes de traducao
+     * @returns Mensagem traduzida
      *
      * @example
-     * // Translates 'http.error.404'
+     * // Traduz 'http.error.404'
      * const message = messageService.translateKey(['http', 'error', '404']);
      *
      * @example
-     * // Translates 'auth.error.invalidPassword'
+     * // Traduz 'auth.error.invalidCredentials'
      * const message = messageService.translateKey(
-     *   ['auth', 'error', 'invalidPassword'],
+     *   ['auth', 'error', 'invalidCredentials'],
      *   { args: { attempts: 3 } }
      * );
      */
@@ -118,10 +118,10 @@ export class MessageService {
     }
 
     /**
-     * Get the current language from the i18n context
-     * Falls back to default language if context is not available
+     * Obtem o idioma atual a partir do contexto i18n.
+     * Usa o idioma padrao se o contexto nao estiver disponivel.
      *
-     * @returns Current language code
+     * @returns Codigo do idioma atual
      */
     getCurrentLanguage(): string {
         try {
@@ -133,11 +133,11 @@ export class MessageService {
     }
 
     /**
-     * Resolve language from provided value or context
-     * Priority: provided lang > context lang > fallback lang
+     * Resolve o idioma a partir do valor informado ou do contexto.
+     * Prioridade: idioma informado > idioma do contexto > idioma padrao.
      *
-     * @param lang - Optional language override
-     * @returns Resolved language code
+     * @param lang - Sobrescrita opcional de idioma
+     * @returns Codigo de idioma resolvido
      */
     private resolveLanguage(lang?: string): string {
         if (lang) {

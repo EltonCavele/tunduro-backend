@@ -107,6 +107,20 @@ export class CourtCreateRequestDto {
   @Min(0)
   pricePerHour: number;
 
+  @ApiPropertyOptional({ example: 900 })
+  @IsOptional()
+  @Transform(toNumber)
+  @IsNumber()
+  @Min(0)
+  memberPricePerHour?: number;
+
+  @ApiPropertyOptional({ example: 200 })
+  @IsOptional()
+  @Transform(toNumber)
+  @IsNumber()
+  @Min(0)
+  lightingPricePerHour?: number;
+
   @ApiPropertyOptional({ example: 'MZN', default: 'MZN' })
   @IsOptional()
   @IsString()
@@ -212,6 +226,20 @@ export class CourtUpdateRequestDto {
   @IsNumber()
   @Min(0)
   pricePerHour?: number;
+
+  @ApiPropertyOptional({ example: 900 })
+  @IsOptional()
+  @Transform(toNumber)
+  @IsNumber()
+  @Min(0)
+  memberPricePerHour?: number;
+
+  @ApiPropertyOptional({ example: 200 })
+  @IsOptional()
+  @Transform(toNumber)
+  @IsNumber()
+  @Min(0)
+  lightingPricePerHour?: number;
 
   @ApiPropertyOptional({ example: 'MZN' })
   @IsOptional()

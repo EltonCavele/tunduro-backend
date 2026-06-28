@@ -12,7 +12,7 @@ import { MessageService } from './services/message.service';
 @Module({
   imports: [
     I18nModule.forRoot({
-      fallbackLanguage: 'en',
+      fallbackLanguage: 'pt',
       loaderOptions: {
         path: join(__dirname, '../../languages/'),
         watch: true,

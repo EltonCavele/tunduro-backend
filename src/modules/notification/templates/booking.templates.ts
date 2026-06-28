@@ -282,18 +282,44 @@ export function bookingStartingSoonTemplate(
 }
 
 export function bookingEndingSoonTemplate(
+  ctx: BookingNotificationContext,
+  canExtend = false
+): BookingNotificationContent {
+  const greeting = `Olá ${safeName(ctx.organizer)},`;
+  const endTime = timeFormatter.format(ctx.booking.endAt);
+  const intro = canExtend
+    ? `A sua reserva no ${ctx.court.name} termina às ${endTime}. Podes prolongar +1 hora no app se confirmares o pagamento M-Pesa.`
+    : `A sua reserva no ${ctx.court.name} termina às ${endTime}. Boa reta final!`;
+  const pushBody = canExtend
+    ? `${ctx.court.name} termina às ${endTime}. Prolonga +1h no app se a próxima hora estiver livre.`
+    : `Reta final em ${ctx.court.name}. Termina às ${endTime}.`;
+
+  return {
+    pushTitle: 'A sua reserva termina em 10 minutos',
+    pushBody,
+    emailSubject: 'A sua reserva termina em 10 minutos',
+    emailHtml: wrapEmail(
+      'A sua reserva termina em 10 minutos',
+      `<p>${greeting}</p><p>${intro}</p>${detailsHtml(ctx)}`,
+      ctx
+    ),
+    emailText: `${greeting}\n\n${intro}\n\n${detailsText(ctx)}`,
+  };
+}
+
+export function bookingExtendedTemplate(
   ctx: BookingNotificationContext
 ): BookingNotificationContent {
   const greeting = `Olá ${safeName(ctx.organizer)},`;
   const endTime = timeFormatter.format(ctx.booking.endAt);
-  const intro = `A sua reserva no ${ctx.court.name} termina às ${endTime}. Boa reta final!`;
+  const intro = `A sua reserva no ${ctx.court.name} foi prolongada por mais 1 hora. Novo fim: ${endTime}.`;
 
   return {
-    pushTitle: 'A sua reserva termina em 10 minutos',
-    pushBody: `Reta final em ${ctx.court.name}. Termina às ${endTime}.`,
-    emailSubject: 'A sua reserva termina em 10 minutos',
+    pushTitle: 'Reserva prolongada com sucesso',
+    pushBody: `${ctx.court.name} até às ${endTime}. Boa continuação!`,
+    emailSubject: 'A sua reserva foi prolongada',
     emailHtml: wrapEmail(
-      'A sua reserva termina em 10 minutos',
+      'Reserva prolongada com sucesso',
       `<p>${greeting}</p><p>${intro}</p>${detailsHtml(ctx)}`,
       ctx
     ),

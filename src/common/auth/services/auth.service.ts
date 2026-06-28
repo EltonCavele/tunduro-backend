@@ -49,7 +49,7 @@ export class AuthService implements IAuthService {
     });
 
     if (!user) {
-      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+      throw new UnauthorizedException('auth.error.invalidCredentials');
     }
 
     const passwordMatched = await this.helperEncryptionService.match(
@@ -58,10 +58,7 @@ export class AuthService implements IAuthService {
     );
 
     if (!passwordMatched) {
-      throw new HttpException(
-        'auth.error.invalidPassword',
-        HttpStatus.BAD_REQUEST
-      );
+      throw new UnauthorizedException('auth.error.invalidCredentials');
     }
 
     if (!user.isVerified) {

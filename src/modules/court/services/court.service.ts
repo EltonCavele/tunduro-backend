@@ -192,7 +192,18 @@ export class CourtService {
       this.databaseService.booking.findMany({
         where,
         orderBy: { startAt: 'desc' },
-        include: { participants: { select: { userId: true } } },
+        include: {
+          organizer: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatarUrl: true,
+            },
+          },
+          participants: { select: { userId: true } },
+        },
       }),
     ]);
 
@@ -206,6 +217,9 @@ export class CourtService {
             startAt: item.startAt,
             endAt: item.endAt,
             status: item.status,
+            organizerId: item.organizerId,
+            organizer: item.organizer ?? null,
+            participantCount: item.participants.length,
           } as CourtBookingPublicResponseDto;
         }
         return {
@@ -214,6 +228,8 @@ export class CourtService {
           endAt: item.endAt,
           status: item.status,
           organizerId: item.organizerId,
+          organizer: item.organizer ?? null,
+          participantCount: item.participants.length,
           participantIds: item.participants.map(p => p.userId),
         } as CourtBookingAdminResponseDto;
       }),
@@ -246,6 +262,12 @@ export class CourtService {
         hasLighting: payload.hasLighting,
         rules: payload.rules?.trim() || null,
         pricePerHour: new Prisma.Decimal(payload.pricePerHour),
+        memberPricePerHour: new Prisma.Decimal(
+          payload.memberPricePerHour ?? payload.pricePerHour
+        ),
+        lightingPricePerHour: new Prisma.Decimal(
+          payload.lightingPricePerHour ?? 0
+        ),
         currency: (payload.currency ?? 'MZN').trim().toUpperCase(),
         maxPlayers: payload.maxPlayers ?? 4,
         lightingDeviceId: payload.lightingDeviceId ?? [],
@@ -292,6 +314,12 @@ export class CourtService {
     if (payload.rules !== undefined) data.rules = payload.rules?.trim() || null;
     if (payload.pricePerHour !== undefined)
       data.pricePerHour = new Prisma.Decimal(payload.pricePerHour);
+    if (payload.memberPricePerHour !== undefined)
+      data.memberPricePerHour = new Prisma.Decimal(payload.memberPricePerHour);
+    if (payload.lightingPricePerHour !== undefined)
+      data.lightingPricePerHour = new Prisma.Decimal(
+        payload.lightingPricePerHour
+      );
     if (payload.currency !== undefined)
       data.currency = payload.currency.trim().toUpperCase();
     if (payload.maxPlayers !== undefined) data.maxPlayers = payload.maxPlayers;
@@ -453,6 +481,8 @@ export class CourtService {
       hasLighting: court.hasLighting,
       rules: court.rules ?? null,
       pricePerHour: Number(court.pricePerHour),
+      memberPricePerHour: Number(court.memberPricePerHour),
+      lightingPricePerHour: Number(court.lightingPricePerHour),
       currency: court.currency,
       maxPlayers: court.maxPlayers,
       isActive: court.isActive,

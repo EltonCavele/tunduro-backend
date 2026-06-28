@@ -9,6 +9,7 @@ import { NotificationModule } from 'src/modules/notification/notification.module
 import { PaymentModule } from 'src/modules/payment/payment.module';
 import { ReportsModule } from 'src/modules/reports/reports.module';
 import { UserModule } from 'src/modules/user/user.module';
+import { WalletModule } from 'src/modules/wallet/wallet.module';
 import { WorkerModule } from 'src/workers/worker.module';
 
 import { HealthController } from './controllers/health.controller';
@@ -31,6 +32,7 @@ import { HealthController } from './controllers/health.controller';
     NotificationModule,
     LightingModule,
     PaymentModule,
+    WalletModule,
     ReportsModule,
   ],
   controllers: [HealthController],

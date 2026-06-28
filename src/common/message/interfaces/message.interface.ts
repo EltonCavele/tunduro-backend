@@ -1,61 +1,61 @@
 /**
- * Translation options for the message service
+ * Opcoes de traducao para o servico de mensagens.
  */
 export interface ITranslateOptions {
     /**
-     * Language code (e.g., 'en', 'es', 'fr')
-     * If not provided, will use the language from the current request context
+     * Codigo do idioma (ex.: 'pt', 'en', 'fr').
+     * Se nao for informado, usa o idioma do contexto atual da requisicao.
      */
     lang?: string;
 
     /**
-     * Arguments to interpolate into the translation
-     * These will replace placeholders in the translation string
+     * Argumentos para interpolar na traducao.
+     * Eles substituem os placeholders no texto traduzido.
      */
     args?: Record<string, any>;
 
     /**
-     * Default value to return if translation key is not found
-     * If not provided, will use the key itself as the default
+     * Valor padrao retornado se a chave de traducao nao for encontrada.
+     * Se nao for informado, usa a propria chave como padrao.
      */
     defaultValue?: string;
 }
 
 /**
- * Bulk translation item
+ * Item de traducao em lote.
  */
 export interface ITranslateItem {
     /**
-     * Translation key
+     * Chave de traducao.
      */
     key: string;
 
     /**
-     * Arguments to interpolate
+     * Argumentos para interpolar.
      */
     args?: Record<string, any>;
 
     /**
-     * Default value for this specific translation
+     * Valor padrao para esta traducao especifica.
      */
     defaultValue?: string;
 }
 
 /**
- * Common translation key patterns used throughout the application
+ * Padroes comuns de chaves de traducao usados na aplicacao.
  */
 export enum TranslationKey {
-    // HTTP Status Messages
+    // Mensagens de status HTTP
     HTTP_SUCCESS = 'http.success',
     HTTP_ERROR = 'http.error',
 
-    // Auth Messages
+    // Mensagens de autenticacao
     AUTH_ERROR = 'auth.error',
 
-    // Validation Messages
+    // Mensagens de validacao
     VALIDATION_ERROR = 'validation',
 
-    // Generic Messages
+    // Mensagens genericas
     OPERATION_SUCCESS = 'common.operationSuccess',
     OPERATION_FAILED = 'common.operationFailed',
 }

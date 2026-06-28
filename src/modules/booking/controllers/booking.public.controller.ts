@@ -18,6 +18,7 @@ import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated
 import {
   BookingCancelRequestDto,
   BookingCreateRequestDto,
+  BookingExtendRequestDto,
   BookingInvitationRespondDto,
   BookingInvitationTokenRespondDto,
   BookingMeQueryRequestDto,
@@ -199,5 +200,25 @@ export class BookingPublicController {
     @Param('id') bookingId: string
   ): Promise<BookingResponseDto> {
     return this.bookingService.checkIn(user, bookingId);
+  }
+
+  @Post(':id/extend')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Prolongar reserva em curso (+1 hora)',
+    description:
+      'Disponível 10 minutos antes do fim até 10 minutos depois, se a hora seguinte estiver livre. Cria checkout M-Pesa e devolve sessionId para polling.',
+  })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'booking.success.extended',
+  })
+  async extendBooking(
+    @AuthUser() user: IAuthUser,
+    @Param('id') bookingId: string,
+    @Body() payload: BookingExtendRequestDto
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.startExtensionCheckout(user, bookingId, payload);
   }
 }

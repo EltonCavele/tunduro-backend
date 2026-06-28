@@ -1,0 +1,5 @@
+export const BOOKING_EXTENSION_INTENT = 'EXTENSION';
+export const EXTENSION_DURATION_MINUTES = 60;
+export const EXTENSION_WINDOW_BEFORE_MS = 10 * 60_000;
+export const EXTENSION_WINDOW_AFTER_MS = 10 * 60_000;
+export const CLUB_TIMEZONE = 'Africa/Maputo';

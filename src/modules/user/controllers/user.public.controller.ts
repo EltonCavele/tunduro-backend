@@ -67,7 +67,7 @@ export class UserPublicController {
       sortOrder,
       gender,
       undefined,
-      [Role.USER]
+      [Role.USER, Role.MEMBER]
     );
   }
 

@@ -81,6 +81,10 @@ export class BookingCheckoutSessionResponseDto {
 
   @ApiProperty()
   @Expose()
+  lightingRequested: boolean;
+
+  @ApiProperty()
+  @Expose()
   currency: string;
 
   @ApiProperty()

@@ -78,6 +78,16 @@ export class CourtResponseDto {
   @Transform(toNumber)
   pricePerHour: number;
 
+  @ApiProperty({ example: 900 })
+  @Expose()
+  @Transform(toNumber)
+  memberPricePerHour: number;
+
+  @ApiProperty({ example: 200 })
+  @Expose()
+  @Transform(toNumber)
+  lightingPricePerHour: number;
+
   @ApiProperty({ example: 'MZN' })
   @Expose()
   currency: string;
@@ -141,6 +151,28 @@ export class CourtResponseDto {
   updatedAt: Date;
 }
 
+export class CourtBookingOrganizerResponseDto {
+  @ApiProperty()
+  @Expose()
+  id: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  firstName: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  lastName: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  email: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  avatarUrl: string | null;
+}
+
 export class CourtBookingPublicResponseDto {
   @ApiProperty()
   @Expose()
@@ -159,13 +191,22 @@ export class CourtBookingPublicResponseDto {
   @ApiProperty()
   @Expose()
   status: string;
-}
 
-export class CourtBookingAdminResponseDto extends CourtBookingPublicResponseDto {
   @ApiProperty()
   @Expose()
   organizerId: string;
 
+  @ApiPropertyOptional()
+  @Expose()
+  organizer: CourtBookingOrganizerResponseDto | null;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(toNumber)
+  participantCount: number;
+}
+
+export class CourtBookingAdminResponseDto extends CourtBookingPublicResponseDto {
   @ApiProperty({ type: [String] })
   @Expose()
   participantIds: string[];

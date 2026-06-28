@@ -1,0 +1,10 @@
+{
+  "success": {
+    "details": "Saldo da carteira recuperado com sucesso",
+    "topUp": "Saldo da carteira recarregado com sucesso"
+  },
+  "error": {
+    "invalidAmount": "O valor da carteira deve ser maior que zero",
+    "insufficientBalance": "Saldo do clube insuficiente"
+  }
+}

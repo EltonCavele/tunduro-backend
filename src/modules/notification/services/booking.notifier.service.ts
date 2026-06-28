@@ -13,6 +13,7 @@ import {
   bookingCancelledByAdminTemplate,
   bookingCreatedByAdminTemplate,
   bookingEndingSoonTemplate,
+  bookingExtendedTemplate,
   bookingExpiredTemplate,
   bookingStartingSoonTemplate,
   checkInTemplate,
@@ -90,10 +91,19 @@ export class BookingNotifierService {
     );
   }
 
-  async notifyBookingEndingSoon(bookingId: string): Promise<void> {
-    await this.dispatchBooking(bookingId, ctx =>
-      bookingEndingSoonTemplate(ctx)
+  async notifyBookingEndingSoon(
+    bookingId: string,
+    canExtend = false
+  ): Promise<void> {
+    await this.dispatchBooking(
+      bookingId,
+      ctx => bookingEndingSoonTemplate(ctx, canExtend),
+      canExtend ? { action: 'extend' } : undefined
     );
+  }
+
+  async notifyBookingExtended(bookingId: string): Promise<void> {
+    await this.dispatchBooking(bookingId, ctx => bookingExtendedTemplate(ctx));
   }
 
   async notifyCheckoutCreatedByAdmin(sessionId: string): Promise<void> {
@@ -167,7 +177,8 @@ export class BookingNotifierService {
 
   private async dispatchBooking(
     bookingId: string,
-    build: (ctx: BookingNotificationContext) => BookingNotificationContent
+    build: (ctx: BookingNotificationContext) => BookingNotificationContent,
+    extraData?: Record<string, string>
   ): Promise<void> {
     try {
       const ctx = await this.loadBookingContext(bookingId);
@@ -179,6 +190,7 @@ export class BookingNotifierService {
         await this.send(content, recipient, {
           type: 'booking',
           bookingId,
+          ...extraData,
         });
       }
     } catch (error) {

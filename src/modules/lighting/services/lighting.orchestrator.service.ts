@@ -34,6 +34,10 @@ export class LightingOrchestratorService {
       return;
     }
 
+    if (!booking.lightingRequested) {
+      return;
+    }
+
     if (
       !booking.court.hasLighting ||
       !Array.isArray(booking.court.lightingDeviceId) ||
@@ -76,6 +80,10 @@ export class LightingOrchestratorService {
       this.logger.warn(
         `deactivateNow skipped: booking/court not found (bookingId=${bookingId})`
       );
+      return;
+    }
+
+    if (!booking.lightingRequested) {
       return;
     }
 
@@ -124,6 +132,7 @@ export class LightingOrchestratorService {
         where: {
           courtId: court.id,
           status: BookingStatus.CONFIRMED,
+          lightingRequested: true,
           startAt: { lte: now },
           endAt: { gt: now },
         },
@@ -147,6 +156,7 @@ export class LightingOrchestratorService {
           where: {
             courtId: court.id,
             status: BookingStatus.CONFIRMED,
+            lightingRequested: true,
             endAt: {
               lte: now,
               gt: twoMinutesAgo,

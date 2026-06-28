@@ -129,6 +129,26 @@ export class BookingPaymentResponseDto {
   processedAt: Date | null;
 }
 
+export class BookingExtensionEligibilityDto {
+  @ApiProperty()
+  @Expose()
+  available: boolean;
+
+  @ApiPropertyOptional()
+  @Expose()
+  @Transform(toNumber)
+  amount?: number;
+
+  @ApiPropertyOptional()
+  @Expose()
+  @Transform(toDate)
+  newEndAt?: Date;
+
+  @ApiPropertyOptional()
+  @Expose()
+  reason?: string;
+}
+
 export class BookingResponseDto {
   @ApiProperty()
   @Expose()
@@ -166,6 +186,10 @@ export class BookingResponseDto {
   @Expose()
   @Transform(toNumber)
   paidAmount: number;
+
+  @ApiProperty()
+  @Expose()
+  lightingRequested: boolean;
 
   @ApiProperty()
   @Expose()
@@ -209,4 +233,9 @@ export class BookingResponseDto {
   @Expose()
   @Transform(toDate)
   updatedAt: Date;
+
+  @ApiPropertyOptional({ type: BookingExtensionEligibilityDto })
+  @Expose()
+  @Type(() => BookingExtensionEligibilityDto)
+  extension?: BookingExtensionEligibilityDto;
 }
