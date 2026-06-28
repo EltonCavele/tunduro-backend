@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class WalletTopUpRequestDto {
   @ApiProperty({ example: 1500, minimum: 0.01 })
@@ -14,4 +21,20 @@ export class WalletTopUpRequestDto {
   @IsString()
   @MaxLength(300)
   note?: string;
+}
+
+export class WalletSelfTopUpRequestDto {
+  @ApiProperty({ example: 1500, minimum: 0.01 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @ApiProperty({
+    example: '258841234567',
+    description: 'Numero M-Pesa usado para autorizar a recarga',
+  })
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
 }

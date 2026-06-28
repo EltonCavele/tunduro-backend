@@ -1,10 +1,11 @@
-import { Controller, Get, HttpStatus } from '@nestjs/common';
+import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
 import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 
+import { WalletSelfTopUpRequestDto } from '../dtos/request/wallet.request';
 import { WalletResponseDto } from '../dtos/response/wallet.response';
 import { WalletService } from '../services/wallet.service';
 
@@ -26,5 +27,20 @@ export class WalletPublicController {
   })
   async getMyWallet(@AuthUser() user: IAuthUser): Promise<WalletResponseDto> {
     return this.walletService.getWallet(user.userId);
+  }
+
+  @Post('me/top-ups')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Top up current user club balance via M-Pesa' })
+  @DocResponse({
+    serialization: WalletResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'wallet.success.topUp',
+  })
+  async topUpMyWallet(
+    @AuthUser() user: IAuthUser,
+    @Body() dto: WalletSelfTopUpRequestDto
+  ): Promise<WalletResponseDto> {
+    return this.walletService.selfTopUp(user.userId, dto);
   }
 }

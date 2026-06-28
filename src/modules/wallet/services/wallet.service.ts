@@ -1,10 +1,15 @@
 import { randomUUID } from 'crypto';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, WalletTransactionType } from '@prisma/client';
+import { PaymentMethod, Prisma, WalletTransactionType } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
+import { PaymentProviderFactory } from 'src/modules/payment/providers/payment.provider.factory';
+import { normalizeMozMsisdn } from 'src/modules/payment/utils/phone.util';
 
-import { WalletTopUpRequestDto } from '../dtos/request/wallet.request';
+import {
+  WalletSelfTopUpRequestDto,
+  WalletTopUpRequestDto,
+} from '../dtos/request/wallet.request';
 import { WalletResponseDto } from '../dtos/response/wallet.response';
 
 const DEFAULT_CURRENCY = 'MZN';
@@ -19,7 +24,10 @@ interface WalletDebitArgs {
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly paymentProviderFactory: PaymentProviderFactory
+  ) {}
 
   async getWallet(userId: string): Promise<WalletResponseDto> {
     const wallet = await this.db.wallet.upsert({
@@ -50,29 +58,60 @@ export class WalletService {
     const amount = this.toPositiveDecimal(dto.amount);
 
     await this.db.$transaction(async tx => {
-      const wallet = await tx.wallet.upsert({
-        where: { userId },
-        create: {
-          userId,
-          balance: amount,
-          currency: DEFAULT_CURRENCY,
-        },
-        update: {
-          balance: { increment: amount },
-        },
+      await this.createTopUpTransaction(tx, {
+        amount,
+        createdByUserId: adminUserId,
+        note: dto.note?.trim() || null,
+        reference: this.reference('TOPUP'),
+        userId,
       });
+    });
 
-      await tx.walletTransaction.create({
-        data: {
-          userId,
-          createdByUserId: adminUserId,
-          type: WalletTransactionType.TOP_UP,
-          amount,
-          balanceAfter: wallet.balance,
-          currency: wallet.currency,
-          reference: this.reference('TOPUP'),
-          note: dto.note?.trim() || null,
-        },
+    return this.getWallet(userId);
+  }
+
+  async selfTopUp(
+    userId: string,
+    dto: WalletSelfTopUpRequestDto
+  ): Promise<WalletResponseDto> {
+    await this.assertUserExists(userId);
+
+    const amount = this.toPositiveDecimal(dto.amount);
+    const msisdn = normalizeMozMsisdn(dto.phone);
+
+    if (!msisdn) {
+      throw new HttpException(
+        'payment.error.invalidPhone',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const reference = this.reference('TOPUP');
+    const provider = this.paymentProviderFactory.getProvider(
+      PaymentMethod.MPESA
+    );
+    const result = await provider.charge({
+      amount: Number(amount),
+      currency: DEFAULT_CURRENCY,
+      phone: msisdn,
+      reference,
+      thirdPartyRef: reference.replace(/[^A-Za-z0-9]/g, '').slice(0, 20),
+    });
+
+    if (!result.success) {
+      throw new HttpException(
+        result.providerMessage || 'payment.error.declined',
+        HttpStatus.PAYMENT_REQUIRED
+      );
+    }
+
+    await this.db.$transaction(async tx => {
+      await this.createTopUpTransaction(tx, {
+        amount,
+        note: 'Recarga via M-Pesa',
+        paymentReference: result.providerTransactionId ?? reference,
+        reference,
+        userId,
       });
     });
 
@@ -131,6 +170,44 @@ export class WalletService {
     if (!user || user.deletedAt) {
       throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
     }
+  }
+
+  private async createTopUpTransaction(
+    tx: Prisma.TransactionClient,
+    args: {
+      amount: Prisma.Decimal;
+      createdByUserId?: string | null;
+      note?: string | null;
+      paymentReference?: string | null;
+      reference: string;
+      userId: string;
+    }
+  ) {
+    const wallet = await tx.wallet.upsert({
+      where: { userId: args.userId },
+      create: {
+        userId: args.userId,
+        balance: args.amount,
+        currency: DEFAULT_CURRENCY,
+      },
+      update: {
+        balance: { increment: args.amount },
+      },
+    });
+
+    return tx.walletTransaction.create({
+      data: {
+        userId: args.userId,
+        createdByUserId: args.createdByUserId ?? null,
+        type: WalletTransactionType.TOP_UP,
+        amount: args.amount,
+        balanceAfter: wallet.balance,
+        currency: wallet.currency,
+        reference: args.reference,
+        paymentReference: args.paymentReference ?? null,
+        note: args.note?.trim() || null,
+      },
+    });
   }
 
   private toPositiveDecimal(value: number | Prisma.Decimal): Prisma.Decimal {
