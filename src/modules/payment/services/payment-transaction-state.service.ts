@@ -180,6 +180,53 @@ export class PaymentTransactionStateService {
     });
   }
 
+  async completeCheckoutWithoutBooking(
+    tx: Prisma.TransactionClient,
+    session: BookingCheckoutSession,
+    method: PaymentMethod,
+    result: ChargeResult
+  ): Promise<void> {
+    const updated = await tx.paymentTransaction.updateMany({
+      where: { checkoutSessionId: session.id },
+      data: {
+        bookingId: null,
+        metadata: (session.metadata as Prisma.InputJsonValue) ?? undefined,
+        method,
+        phone: session.phone,
+        providerMessage: result.providerMessage,
+        providerStatusCode: result.providerStatusCode,
+        providerTransactionId: result.providerTransactionId ?? null,
+        processedAt: new Date(),
+        status: PaymentStatus.COMPLETED,
+      },
+    });
+
+    if (updated.count > 0) {
+      return;
+    }
+
+    await tx.paymentTransaction.create({
+      data: {
+        amount: session.amount,
+        bookingId: null,
+        checkoutSessionId: session.id,
+        currency: session.currency,
+        attempts: 1,
+        metadata: (session.metadata as Prisma.InputJsonValue) ?? undefined,
+        method,
+        phone: session.phone,
+        providerMessage: result.providerMessage,
+        providerStatusCode: result.providerStatusCode,
+        providerTransactionId: result.providerTransactionId ?? null,
+        processedAt: new Date(),
+        reference: session.reference,
+        status: PaymentStatus.COMPLETED,
+        type: this.getCheckoutPaymentType(session),
+        userId: session.organizerId,
+      },
+    });
+  }
+
   async markWalletTopUpPending(
     session: WalletTopUpSession,
     method: PaymentMethod,

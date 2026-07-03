@@ -29,6 +29,8 @@ const CHECKOUT_TRANSACTION_OPTIONS = {
   maxWait: 10_000,
   timeout: 20_000,
 };
+const COURT_SCHEDULE_LOCK_NAMESPACE = 759121;
+const SLOT_TAKEN_REASON = 'booking.error.conflict';
 
 @Injectable()
 export class BookingCheckoutFinalizerService {
@@ -165,6 +167,17 @@ export class BookingCheckoutFinalizerService {
       throw new Error(`Booking ${targetBookingId} is not extendable`);
     }
 
+    await this.lockCourtSchedule(tx, session.courtId);
+    const hasConflict = await this.hasConfirmedOverlap(tx, session, booking.id);
+    if (hasConflict) {
+      await this.markPaidSessionWithoutBooking(tx, session, method, result);
+      return {
+        bookingId: null,
+        createdInvitationIds: [],
+        isExtension: true,
+      };
+    }
+
     const extensionAmount = Number(session.amount);
     const addedMinutes = session.durationMinutes;
 
@@ -220,6 +233,17 @@ export class BookingCheckoutFinalizerService {
     result: ChargeResult
   ): Promise<BookingCheckoutCompletion> {
     const createdInvitationIds: string[] = [];
+
+    await this.lockCourtSchedule(tx, session.courtId);
+    const hasConflict = await this.hasConfirmedOverlap(tx, session);
+    if (hasConflict) {
+      await this.markPaidSessionWithoutBooking(tx, session, method, result);
+      return {
+        bookingId: null,
+        createdInvitationIds,
+        isExtension: false,
+      };
+    }
 
     const booking = await tx.booking.create({
       data: {
@@ -283,6 +307,65 @@ export class BookingCheckoutFinalizerService {
       createdInvitationIds,
       isExtension: false,
     };
+  }
+
+  private async lockCourtSchedule(
+    tx: Prisma.TransactionClient,
+    courtId: string
+  ): Promise<void> {
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        ${COURT_SCHEDULE_LOCK_NAMESPACE},
+        hashtext(${courtId})
+      )
+    `;
+  }
+
+  private async hasConfirmedOverlap(
+    tx: Prisma.TransactionClient,
+    session: BookingCheckoutSession,
+    excludeBookingId?: string
+  ): Promise<boolean> {
+    const count = await tx.booking.count({
+      where: {
+        courtId: session.courtId,
+        startAt: { lt: session.endAt },
+        endAt: { gt: session.startAt },
+        status: BookingStatus.CONFIRMED,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+    });
+
+    return count > 0;
+  }
+
+  private async markPaidSessionWithoutBooking(
+    tx: Prisma.TransactionClient,
+    session: BookingCheckoutSession,
+    method: PaymentMethod,
+    result: ChargeResult
+  ): Promise<void> {
+    if (method !== PaymentMethod.CLUB_BALANCE) {
+      await this.paymentTransactions.completeCheckoutWithoutBooking(
+        tx,
+        session,
+        method,
+        result
+      );
+    }
+
+    await tx.bookingCheckoutSession.update({
+      where: { id: session.id },
+      data: {
+        status:
+          method === PaymentMethod.CLUB_BALANCE
+            ? BookingCheckoutSessionStatus.PAYMENT_FAILED
+            : BookingCheckoutSessionStatus.REFUND_PENDING,
+        failureReason: SLOT_TAKEN_REASON,
+        paidAt: method === PaymentMethod.CLUB_BALANCE ? null : new Date(),
+        completedAt: new Date(),
+      },
+    });
   }
 
   private async createInvitations(

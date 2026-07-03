@@ -494,13 +494,15 @@ export class BookingCheckoutService {
           result
         );
 
-        await this.walletService.debitBookingBalance(tx, {
-          userId: session.organizerId,
-          amount: session.amount,
-          bookingId: completion.bookingId,
-          paymentReference: session.reference,
-          note: 'Reserva paga com saldo do clube',
-        });
+        if (completion.bookingId) {
+          await this.walletService.debitBookingBalance(tx, {
+            userId: session.organizerId,
+            amount: session.amount,
+            bookingId: completion.bookingId,
+            paymentReference: session.reference,
+            note: 'Reserva paga com saldo do clube',
+          });
+        }
       });
     } catch (error) {
       await this.db.bookingCheckoutSession.update({
