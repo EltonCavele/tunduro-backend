@@ -377,7 +377,11 @@ export class BookingCheckoutService {
   }
 
   private assertSupportedCheckoutMethod(method: PaymentMethod): void {
-    if (method === PaymentMethod.MPESA || method === PaymentMethod.CLUB_BALANCE) {
+    if (
+      method === PaymentMethod.MPESA ||
+      method === PaymentMethod.CLUB_BALANCE ||
+      method === PaymentMethod.EMOLA
+    ) {
       return;
     }
 
@@ -387,7 +391,10 @@ export class BookingCheckoutService {
     );
   }
 
-  private async enqueueChargeOrDeleteSession(sessionId: string, isExtension = false) {
+  private async enqueueChargeOrDeleteSession(
+    sessionId: string,
+    isExtension = false
+  ) {
     try {
       await this.paymentQueue.enqueueCharge(sessionId);
     } catch (error) {
@@ -408,7 +415,9 @@ export class BookingCheckoutService {
     }
   }
 
-  private async hasPendingExtensionCheckout(bookingId: string): Promise<boolean> {
+  private async hasPendingExtensionCheckout(
+    bookingId: string
+  ): Promise<boolean> {
     const now = new Date();
     const count = await this.db.bookingCheckoutSession.count({
       where: {
@@ -460,11 +469,9 @@ export class BookingCheckoutService {
   private async completeBalanceCheckout(
     session: any
   ): Promise<BookingCheckoutSessionResponseDto> {
-    let completion:
-      | Awaited<
-          ReturnType<BookingCheckoutFinalizerService['applySuccessfulSession']>
-        >
-      | null = null;
+    let completion: Awaited<
+      ReturnType<BookingCheckoutFinalizerService['applySuccessfulSession']>
+    > | null = null;
 
     const result = {
       success: true,
