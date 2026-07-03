@@ -30,4 +30,13 @@ export class WalletSelfTopUpRequestDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({
+    example: 'exp://192.168.1.10:8081/--/payments/wallet-return',
+    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  returnUrl?: string;
 }

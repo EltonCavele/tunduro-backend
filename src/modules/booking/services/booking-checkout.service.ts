@@ -13,6 +13,7 @@ import { DatabaseService } from 'src/common/database/services/database.service';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { CourtService } from 'src/modules/court/services/court.service';
 import { PaymentQueue } from 'src/modules/payment/queues/payment.queue';
+import { mergeAppReturnUrlMetadata } from 'src/modules/payment/helpers/paysuite-payment.helper';
 import { normalizePaysuiteReference } from 'src/modules/payment/helpers/payment-reference.helper';
 import { BookingCheckoutFinalizerService } from 'src/modules/payment/services/booking-checkout-finalizer.service';
 import { WalletService } from 'src/modules/wallet/services/wallet.service';
@@ -139,7 +140,7 @@ export class BookingCheckoutService {
         inviteEmails: dto.inviteEmails
           ? (dto.inviteEmails as Prisma.InputJsonValue)
           : Prisma.JsonNull,
-        metadata: metadata ?? Prisma.JsonNull,
+        metadata: mergeAppReturnUrlMetadata(metadata, dto.returnUrl),
       },
     });
 
@@ -222,11 +223,14 @@ export class BookingCheckoutService {
         paymentMethod: method,
         phone,
         lightingRequested: booking.lightingRequested,
-        metadata: {
-          intent: BOOKING_EXTENSION_INTENT,
-          targetBookingId: booking.id,
-          requestedByUserId: user.userId,
-        },
+        metadata: mergeAppReturnUrlMetadata(
+          {
+            intent: BOOKING_EXTENSION_INTENT,
+            targetBookingId: booking.id,
+            requestedByUserId: user.userId,
+          },
+          dto.returnUrl
+        ),
       },
     });
 

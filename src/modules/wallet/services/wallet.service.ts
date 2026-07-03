@@ -11,6 +11,7 @@ import {
 import { DatabaseService } from 'src/common/database/services/database.service';
 import {
   extractPaysuitePaymentId,
+  mergeAppReturnUrlMetadata,
   mergePaysuiteMetadata,
 } from 'src/modules/payment/helpers/paysuite-payment.helper';
 import { normalizePaysuiteReference } from 'src/modules/payment/helpers/payment-reference.helper';
@@ -102,7 +103,10 @@ export class WalletService {
         amount,
         currency: DEFAULT_CURRENCY,
         expiresAt: new Date(Date.now() + DEFAULT_TOP_UP_DEADLINE_MIN * 60000),
-        metadata: { intent: 'wallet_top_up' },
+        metadata: mergeAppReturnUrlMetadata(
+          { intent: 'wallet_top_up' },
+          dto.returnUrl
+        ),
         paymentMethod: PaymentMethod.MPESA,
         phone: dto.phone?.trim() || null,
         reference,

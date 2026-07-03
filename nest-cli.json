@@ -13,7 +13,7 @@
         "assets": [
             {
                 "include": "languages/**/*",
-                "watchAssets": true
+                "watchAssets": false
             }
         ]
     }

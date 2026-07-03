@@ -82,6 +82,7 @@ export class BookingService {
         startAt: dto.startAt,
         endAt: dto.endAt,
         phone: dto.phone,
+        returnUrl: dto.returnUrl,
         paymentMethod: dto.paymentMethod,
         lightingRequested: dto.lightingRequested,
         participantUserIds: dto.participantUserIds,

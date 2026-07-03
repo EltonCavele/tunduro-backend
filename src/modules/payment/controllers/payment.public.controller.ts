@@ -22,9 +22,11 @@ import { PublicRoute } from 'src/common/request/decorators/request.public.decora
 import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
+import { DatabaseService } from 'src/common/database/services/database.service';
 
 import { PaymentListQueryRequestDto } from '../dtos/request/payment.request';
 import { PaymentResponseDto } from '../dtos/response/payment.response';
+import { extractAppReturnUrl } from '../helpers/paysuite-payment.helper';
 import { PaymentService } from '../services/payment.service';
 import { PaysuiteWebhookService } from '../services/paysuite-webhook.service';
 
@@ -37,6 +39,7 @@ export class PaymentPublicController {
   private readonly logger = new Logger(PaymentPublicController.name);
 
   constructor(
+    private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
     private readonly paysuiteWebhookService: PaysuiteWebhookService
   ) {}
@@ -78,16 +81,48 @@ export class PaymentPublicController {
   @Get('paysuite/return')
   @PublicRoute()
   @ApiOperation({ summary: 'Return from PaySuite checkout to mobile app' })
-  handlePaysuiteReturn(
+  async handlePaysuiteReturn(
     @Query('kind') kind: string | undefined,
     @Query('sessionId') sessionId: string | undefined,
     @Res() response: Response
-  ): void {
+  ): Promise<void> {
+    const sessionKind = kind === 'wallet' ? 'wallet' : 'booking';
     const route =
-      kind === 'wallet'
+      sessionKind === 'wallet'
         ? 'myexpoapp://payments/wallet-return'
         : 'myexpoapp://payments/booking-return';
-    const deepLink = `${route}?sessionId=${encodeURIComponent(sessionId ?? '')}`;
+    let deepLink = `${route}?sessionId=${encodeURIComponent(sessionId ?? '')}`;
+
+    if (sessionId) {
+      const session =
+        sessionKind === 'wallet'
+          ? await this.db.walletTopUpSession.findUnique({
+              where: { id: sessionId },
+              select: { metadata: true },
+            })
+          : await this.db.bookingCheckoutSession.findUnique({
+              where: { id: sessionId },
+              select: { metadata: true },
+            });
+      const appReturnUrl = extractAppReturnUrl(session?.metadata);
+
+      if (appReturnUrl) {
+        try {
+          const url = new URL(appReturnUrl);
+          if (['exp:', 'exps:', 'myexpoapp:'].includes(url.protocol)) {
+            url.searchParams.set('sessionId', sessionId);
+            deepLink = url.toString();
+          } else {
+            this.logger.warn(
+              `PaySuite return ignored unsupported app return protocol: ${url.protocol}`
+            );
+          }
+        } catch {
+          this.logger.warn('PaySuite return ignored invalid app return URL');
+        }
+      }
+    }
+
     const escapedDeepLink = deepLink.replace(/"/g, '&quot;');
 
     response

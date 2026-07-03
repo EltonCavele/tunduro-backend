@@ -44,6 +44,15 @@ export class BookingAdminCreateRequestDto {
   phone?: string;
 
   @ApiPropertyOptional({
+    example: 'exp://192.168.1.10:8081/--/payments/booking-return',
+    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  returnUrl?: string;
+
+  @ApiPropertyOptional({
     enum: PaymentMethod,
     example: PaymentMethod.MPESA,
     description: 'Método de pagamento; só MPESA é suportado de momento',
@@ -99,6 +108,15 @@ export class BookingCreateRequestDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({
+    example: 'exp://192.168.1.10:8081/--/payments/booking-return',
+    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  returnUrl?: string;
 
   @ApiPropertyOptional({
     enum: PaymentMethod,
@@ -231,6 +249,15 @@ export class BookingExtendRequestDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({
+    example: 'exp://192.168.1.10:8081/--/payments/booking-return',
+    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  returnUrl?: string;
 
   @ApiPropertyOptional({
     enum: PaymentMethod,

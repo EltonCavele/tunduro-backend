@@ -34,6 +34,35 @@ export function extractPaysuitePaymentId(
     : null;
 }
 
+export function extractAppReturnUrl(
+  metadata: Prisma.JsonValue | null | undefined
+): string | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const appReturnUrl = metadata.appReturnUrl;
+  return typeof appReturnUrl === 'string' && appReturnUrl.trim()
+    ? appReturnUrl.trim()
+    : null;
+}
+
+export function mergeAppReturnUrlMetadata(
+  metadata: Prisma.JsonValue | Prisma.InputJsonValue | null | undefined,
+  appReturnUrl: string | null | undefined
+): Prisma.InputJsonValue {
+  const base: Record<string, unknown> = isRecord(metadata)
+    ? { ...metadata }
+    : {};
+  const cleanAppReturnUrl = appReturnUrl?.trim();
+
+  if (cleanAppReturnUrl) {
+    base.appReturnUrl = cleanAppReturnUrl;
+  }
+
+  return base as Prisma.InputJsonValue;
+}
+
 export function mergePaysuiteMetadata(
   metadata: Prisma.JsonValue | null | undefined,
   update: PaysuiteMetadataUpdate
