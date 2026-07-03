@@ -6,6 +6,7 @@ import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import { UserAdminCreateDto } from '../dtos/request/user.admin-create.request';
+import { UserDeleteAccountDto } from '../dtos/request/user.delete-account.request';
 import {
   UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
@@ -30,6 +31,10 @@ export interface IUserService {
     data: UserNotificationPreferencesUpdateDto
   ): Promise<UserNotificationPreferencesResponseDto>;
   deleteUser(userId: string): Promise<ApiGenericResponseDto>;
+  deleteOwnAccount(
+    userId: string,
+    data: UserDeleteAccountDto
+  ): Promise<ApiGenericResponseDto>;
   getProfile(userId: string): Promise<UserGetProfileResponseDto>;
   updateExpoPushToken(
     userId: string,

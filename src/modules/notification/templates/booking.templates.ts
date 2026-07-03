@@ -87,7 +87,11 @@ function bookingLink(ctx: BookingNotificationContext): string | null {
   return `${base}/bookings/${ctx.booking.id}`;
 }
 
-function wrapEmail(title: string, body: string, ctx: BookingNotificationContext): string {
+function wrapEmail(
+  title: string,
+  body: string,
+  ctx: BookingNotificationContext
+): string {
   const link = bookingLink(ctx);
   const cta = link
     ? `<p style="margin: 24px 0;"><a href="${link}" style="background:#111;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;display:inline-block;">Ver reserva</a></p>`
@@ -133,15 +137,15 @@ export function bookingCreatedByAdminTemplate(
   ctx: BookingNotificationContext
 ): BookingNotificationContent {
   const greeting = `Olá ${safeName(ctx.organizer)},`;
-  const intro = `Foi criada uma reserva em seu nome. Confirme o pagamento M-Pesa no telemóvel para concluir o agendamento.`;
+  const intro = `Foi criada uma reserva em seu nome. Confirme o pagamento para concluir o agendamento.`;
 
   return {
     pushTitle: 'Nova reserva criada',
-    pushBody: `Confirme o pagamento M-Pesa no telemóvel para o slot de ${formatRange(
+    pushBody: `Confirme o pagamento para o slot de ${formatRange(
       ctx.booking.startAt,
       ctx.booking.endAt
     )}.`,
-    emailSubject: `Nova reserva — confirme o pagamento M-Pesa`,
+    emailSubject: `Nova reserva — confirme o pagamento`,
     emailHtml: wrapEmail(
       'Nova reserva criada',
       `<p>${greeting}</p><p>${intro}</p>${detailsHtml(ctx)}`,
@@ -178,7 +182,7 @@ export function paymentFailedTemplate(
   providerMessage: string
 ): BookingNotificationContent {
   const greeting = `Olá ${safeName(ctx.organizer)},`;
-  const intro = `Não conseguimos processar o pagamento M-Pesa da sua reserva, e por isso foi cancelada.`;
+  const intro = `Não conseguimos processar o pagamento da sua reserva, e por isso foi cancelada.`;
   const reason = `Motivo: ${providerMessage}`;
 
   return {
@@ -231,7 +235,8 @@ export function bookingExpiredTemplate(
 
   return {
     pushTitle: 'Reserva expirou',
-    pushBody: 'Não recebemos a confirmação do pagamento a tempo. Reserva cancelada.',
+    pushBody:
+      'Não recebemos a confirmação do pagamento a tempo. Reserva cancelada.',
     emailSubject: 'Reserva expirada — pagamento não confirmado',
     emailHtml: wrapEmail(
       'Reserva expirada',
@@ -288,7 +293,7 @@ export function bookingEndingSoonTemplate(
   const greeting = `Olá ${safeName(ctx.organizer)},`;
   const endTime = timeFormatter.format(ctx.booking.endAt);
   const intro = canExtend
-    ? `A sua reserva no ${ctx.court.name} termina às ${endTime}. Podes prolongar +1 hora no app se confirmares o pagamento M-Pesa.`
+    ? `A sua reserva no ${ctx.court.name} termina às ${endTime}. Podes prolongar +1 hora no app se confirmares o pagamento.`
     : `A sua reserva no ${ctx.court.name} termina às ${endTime}. Boa reta final!`;
   const pushBody = canExtend
     ? `${ctx.court.name} termina às ${endTime}. Prolonga +1h no app se a próxima hora estiver livre.`
@@ -384,17 +389,17 @@ export function checkoutCreatedByAdminTemplate(
   ctx: CheckoutSessionNotificationContext
 ): BookingNotificationContent {
   const greeting = `Olá ${ctx.organizer.firstName?.trim() || ctx.organizer.email},`;
-  const intro = `Foi iniciada uma reserva em seu nome. Confirme o pagamento M-Pesa no telemóvel para concluir o agendamento.`;
+  const intro = `Foi iniciada uma reserva em seu nome. Confirme o pagamento para concluir o agendamento.`;
 
   return {
-    pushTitle: 'Nova reserva — confirme o M-Pesa',
-    pushBody: `Confirme o pagamento M-Pesa para o slot de ${formatRange(
+    pushTitle: 'Nova reserva — confirme o pagamento',
+    pushBody: `Confirme o pagamento para o slot de ${formatRange(
       ctx.session.startAt,
       ctx.session.endAt
     )}.`,
-    emailSubject: 'Nova reserva — confirme o pagamento M-Pesa',
+    emailSubject: 'Nova reserva — confirme o pagamento',
     emailHtml: wrapSessionEmail(
-      'Nova reserva — confirme o M-Pesa',
+      'Nova reserva — confirme o pagamento',
       `<p>${greeting}</p><p>${intro}</p>${sessionDetailsHtml(ctx)}`,
       ctx
     ),
@@ -407,7 +412,7 @@ export function checkoutFailedTemplate(
   providerMessage: string
 ): BookingNotificationContent {
   const greeting = `Olá ${ctx.organizer.firstName?.trim() || ctx.organizer.email},`;
-  const intro = `Não conseguimos processar o pagamento M-Pesa, por isso a reserva não foi efectuada.`;
+  const intro = `Não conseguimos processar o pagamento, por isso a reserva não foi efectuada.`;
   const reason = `Motivo: ${providerMessage}`;
 
   return {

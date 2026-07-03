@@ -3,6 +3,7 @@ import {
   BookingCheckoutSessionStatus,
   BookingStatus,
   ParticipantStatus,
+  PaymentMethod,
   PaymentStatus,
   PaymentType,
   Prisma,
@@ -14,6 +15,7 @@ import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated.dto';
 import { LightingOrchestratorService } from 'src/modules/lighting/services/lighting.orchestrator.service';
 import { BookingNotifierService } from 'src/modules/notification/services/booking.notifier.service';
+import { PaymentTransactionStateService } from 'src/modules/payment/services/payment-transaction-state.service';
 
 import {
   BookingAdminCancelRequestDto,
@@ -31,6 +33,7 @@ import {
 } from '../dtos/response/booking.response';
 import { bookingInclude, mapBooking } from '../helpers/booking-mapper.helper';
 import { BookingCheckoutService } from './booking-checkout.service';
+import { BookingCheckoutRefreshService } from './booking-checkout-refresh.service';
 import { BookingInvitationService } from './booking-invitation.service';
 
 @Injectable()
@@ -42,7 +45,9 @@ export class BookingService {
     private readonly lightingOrchestratorService: LightingOrchestratorService,
     private readonly bookingNotifier: BookingNotifierService,
     private readonly checkoutService: BookingCheckoutService,
-    private readonly invitationService: BookingInvitationService
+    private readonly checkoutRefreshService: BookingCheckoutRefreshService,
+    private readonly invitationService: BookingInvitationService,
+    private readonly paymentTransactions: PaymentTransactionStateService
   ) {}
 
   async createBooking(
@@ -95,6 +100,13 @@ export class BookingService {
     sessionId: string
   ): Promise<BookingCheckoutSessionResponseDto> {
     return this.checkoutService.getCheckoutSession(user, sessionId);
+  }
+
+  async refreshCheckoutSession(
+    user: IAuthUser,
+    sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.checkoutRefreshService.refreshCheckoutSession(user, sessionId);
   }
 
   async adminGetCheckoutSession(
@@ -164,7 +176,11 @@ export class BookingService {
     }
 
     const isMember = booking.participants.some(p => p.userId === user.userId);
-    if (!isMember && booking.organizerId !== user.userId && user.role !== Role.ADMIN) {
+    if (
+      !isMember &&
+      booking.organizerId !== user.userId &&
+      user.role !== Role.ADMIN
+    ) {
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
     }
 
@@ -293,7 +309,10 @@ export class BookingService {
     dto: BookingCancelRequestDto
   ): Promise<BookingResponseDto> {
     const booking = await this.db.booking.findUnique({ where: { id } });
-    if (!booking || (booking.organizerId !== user.userId && user.role !== Role.ADMIN)) {
+    if (
+      !booking ||
+      (booking.organizerId !== user.userId && user.role !== Role.ADMIN)
+    ) {
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
     }
 
@@ -368,20 +387,37 @@ export class BookingService {
         },
         expiresAt: { lt: now },
       },
-      select: { id: true },
     });
 
     let count = 0;
-    for (const row of candidates) {
-      await this.db.bookingCheckoutSession.update({
-        where: { id: row.id },
+    for (const session of candidates) {
+      const updated = await this.db.bookingCheckoutSession.updateMany({
+        where: {
+          id: session.id,
+          status: {
+            in: [
+              BookingCheckoutSessionStatus.OPEN,
+              BookingCheckoutSessionStatus.FINALIZING,
+            ],
+          },
+        },
         data: {
           status: BookingCheckoutSessionStatus.EXPIRED,
           failureReason: 'session timeout',
         },
       });
 
-      await this.bookingNotifier.notifyCheckoutExpired(row.id);
+      if (updated.count !== 1) {
+        continue;
+      }
+
+      await this.paymentTransactions.markCheckoutCancelled(
+        session,
+        session.paymentMethod ?? PaymentMethod.MPESA,
+        'session timeout',
+        'expired'
+      );
+      await this.bookingNotifier.notifyCheckoutExpired(session.id);
       count += 1;
     }
 

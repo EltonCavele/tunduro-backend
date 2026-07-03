@@ -1,13 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class WalletTopUpRequestDto {
   @ApiProperty({ example: 1500, minimum: 0.01 })
@@ -30,11 +23,11 @@ export class WalletSelfTopUpRequestDto {
   @Min(0.01)
   amount: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Numero M-Pesa usado para autorizar a recarga',
+    description: 'Opcional; PaySuite recolhe o numero no checkout',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  phone: string;
+  phone?: string;
 }

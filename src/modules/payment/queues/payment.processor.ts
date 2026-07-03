@@ -1,17 +1,16 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import {
-  BookingCheckoutSessionStatus,
-  PaymentMethod,
-} from '@prisma/client';
+import { BookingCheckoutSessionStatus, PaymentMethod } from '@prisma/client';
 import { Job } from 'bull';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { BookingNotifierService } from 'src/modules/notification/services/booking.notifier.service';
 
+import { mergePaysuiteMetadata } from '../helpers/paysuite-payment.helper';
 import { PaymentProviderFactory } from '../providers/payment.provider.factory';
 import { ChargeResult } from '../providers/payment.provider.interface';
 import { BookingCheckoutFinalizerService } from '../services/booking-checkout-finalizer.service';
+import { PaymentTransactionStateService } from '../services/payment-transaction-state.service';
 import {
   PAYMENT_CHARGE_JOB,
   PAYMENT_QUEUE,
@@ -26,6 +25,7 @@ export class PaymentProcessor {
     private readonly db: DatabaseService,
     private readonly providerFactory: PaymentProviderFactory,
     private readonly checkoutFinalizer: BookingCheckoutFinalizerService,
+    private readonly paymentTransactions: PaymentTransactionStateService,
     private readonly bookingNotifier: BookingNotifierService
   ) {}
 
@@ -49,30 +49,73 @@ export class PaymentProcessor {
       return;
     }
 
-    await this.db.bookingCheckoutSession.update({
-      where: { id: sessionId },
-      data: { status: BookingCheckoutSessionStatus.FINALIZING },
-    });
-
     const method = session.paymentMethod ?? PaymentMethod.MPESA;
     const provider = this.providerFactory.getProvider(method);
     const result = await provider.charge({
       amount: Number(session.amount),
       currency: session.currency,
+      description: `Reserva Tunduro ${session.reference}`,
+      method,
       phone: session.phone ?? undefined,
       reference: session.reference,
+      sessionId: session.id,
       thirdPartyRef: session.id.replace(/-/g, '').slice(0, 20),
     });
 
-    if (result.success) {
+    if (result.status === 'COMPLETED') {
+      const updated = await this.db.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          checkoutUrl: result.checkoutUrl ?? null,
+          metadata: mergePaysuiteMetadata(session.metadata, {
+            checkoutUrl: result.checkoutUrl,
+            paymentId: result.providerPaymentId ?? result.providerTransactionId,
+            status: result.providerStatusCode,
+            transactionId: result.providerTransactionId,
+          }),
+        },
+      });
+
+      await this.paymentTransactions.markCheckoutPending(
+        updated,
+        method,
+        result
+      );
       await this.checkoutFinalizer.completeSuccessfulSession(
-        session,
+        updated,
         method,
         result
       );
       return;
     }
 
+    if (result.status === 'PENDING') {
+      const updated = await this.db.bookingCheckoutSession.update({
+        where: { id: session.id },
+        data: {
+          checkoutUrl: result.checkoutUrl ?? null,
+          metadata: mergePaysuiteMetadata(session.metadata, {
+            checkoutUrl: result.checkoutUrl,
+            paymentId: result.providerPaymentId ?? result.providerTransactionId,
+            status: result.providerStatusCode,
+          }),
+          status: BookingCheckoutSessionStatus.OPEN,
+        },
+      });
+      await this.paymentTransactions.markCheckoutPending(
+        updated,
+        method,
+        result
+      );
+      return;
+    }
+
+    await this.paymentTransactions.markCheckoutFailed(
+      session,
+      method,
+      result.providerMessage,
+      result.providerStatusCode
+    );
     await this.failSession(session.id, result);
   }
 

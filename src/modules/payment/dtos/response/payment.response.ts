@@ -71,9 +71,9 @@ export class PaymentResponseDto {
   @Expose()
   id: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @Expose()
-  bookingId: string;
+  bookingId: string | null;
 
   @ApiProperty()
   @Expose()
@@ -143,8 +143,8 @@ export class PaymentResponseDto {
   @Transform(toDate)
   updatedAt: Date;
 
-  @ApiProperty({ type: PaymentBookingSummaryResponseDto })
+  @ApiPropertyOptional({ type: PaymentBookingSummaryResponseDto })
   @Expose()
   @Type(() => PaymentBookingSummaryResponseDto)
-  booking: PaymentBookingSummaryResponseDto;
+  booking: PaymentBookingSummaryResponseDto | null;
 }

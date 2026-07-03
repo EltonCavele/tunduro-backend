@@ -13,8 +13,8 @@ import { DatabaseService } from 'src/common/database/services/database.service';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import { CourtService } from 'src/modules/court/services/court.service';
 import { PaymentQueue } from 'src/modules/payment/queues/payment.queue';
+import { normalizePaysuiteReference } from 'src/modules/payment/helpers/payment-reference.helper';
 import { BookingCheckoutFinalizerService } from 'src/modules/payment/services/booking-checkout-finalizer.service';
-import { normalizeMozMsisdn } from 'src/modules/payment/utils/phone.util';
 import { WalletService } from 'src/modules/wallet/services/wallet.service';
 
 import {
@@ -65,14 +65,7 @@ export class BookingCheckoutService {
     const method = dto.paymentMethod ?? PaymentMethod.MPESA;
     this.assertSupportedCheckoutMethod(method);
 
-    const msisdn =
-      method === PaymentMethod.MPESA ? normalizeMozMsisdn(dto.phone) : null;
-    if (method === PaymentMethod.MPESA && !msisdn) {
-      throw new HttpException(
-        'payment.error.invalidPhone',
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    const phone = dto.phone?.trim() || null;
 
     const court = await this.courtService.assertCourtIsBookable(dto.courtId);
     const organizer = await this.db.user.findUnique({
@@ -118,7 +111,9 @@ export class BookingCheckoutService {
       lightingRequested,
       organizerRole: organizer.role,
     });
-    const reference = `TUNDURO-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const reference = normalizePaysuiteReference(
+      `TUNDURO${randomUUID().slice(0, 8).toUpperCase()}`
+    );
     const expiresAt = new Date(
       Date.now() + this.getPaymentDeadlineMin() * 60000
     );
@@ -137,7 +132,7 @@ export class BookingCheckoutService {
         status: BookingCheckoutSessionStatus.OPEN,
         expiresAt,
         paymentMethod: method,
-        phone: msisdn,
+        phone,
         participantUserIds: dto.participantUserIds
           ? (dto.participantUserIds as Prisma.InputJsonValue)
           : Prisma.JsonNull,
@@ -174,14 +169,7 @@ export class BookingCheckoutService {
     const method = dto.paymentMethod ?? PaymentMethod.MPESA;
     this.assertSupportedCheckoutMethod(method);
 
-    const msisdn =
-      method === PaymentMethod.MPESA ? normalizeMozMsisdn(dto.phone) : null;
-    if (method === PaymentMethod.MPESA && !msisdn) {
-      throw new HttpException(
-        'payment.error.invalidPhone',
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    const phone = dto.phone?.trim() || null;
 
     const booking = await this.db.booking.findUnique({
       where: { id: bookingId },
@@ -212,7 +200,9 @@ export class BookingCheckoutService {
       lightingRequested: booking.lightingRequested,
       organizerRole: booking.organizer.role,
     });
-    const reference = `TUNDURO-EXT-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const reference = normalizePaysuiteReference(
+      `TUNDUROEXT${randomUUID().slice(0, 8).toUpperCase()}`
+    );
     const expiresAt = new Date(
       Date.now() + this.getPaymentDeadlineMin() * 60000
     );
@@ -230,7 +220,7 @@ export class BookingCheckoutService {
         status: BookingCheckoutSessionStatus.OPEN,
         expiresAt,
         paymentMethod: method,
-        phone: msisdn,
+        phone,
         lightingRequested: booking.lightingRequested,
         metadata: {
           intent: BOOKING_EXTENSION_INTENT,

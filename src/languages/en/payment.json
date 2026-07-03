@@ -9,9 +9,11 @@
     "notFound": "Transação de pagamento não encontrada",
     "alreadyConfirmed": "O pagamento já foi confirmado",
     "invalidMethod": "Método de pagamento inválido",
+    "invalidReference": "Invalid payment reference",
     "invalidPhone": "Número de telemóvel moçambicano inválido",
     "gatewayUnavailable": "O gateway de pagamento está indisponível no momento",
     "declined": "O pagamento foi recusado pelo gateway",
+    "pendingConfirmation": "O pagamento ainda está pendente de confirmação",
     "timeout": "O gateway de pagamento não respondeu a tempo",
     "unsupportedMethod": "O método de pagamento selecionado ainda não é suportado"
   }

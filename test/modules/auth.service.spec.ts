@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 import { AuthService } from 'src/common/auth/services/auth.service';
 import { DatabaseService } from 'src/common/database/services/database.service';
@@ -307,6 +307,127 @@ describe('AuthService', () => {
       expect(result).toEqual({
         ...tokens,
         user: createdUser,
+      });
+    });
+
+    it('should release a soft-deleted email before creating a new account', async () => {
+      const tokens = {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      };
+      const createdUser = {
+        id: 'new-user',
+        email: 'john@example.com',
+        role: Role.USER,
+        tokenVersion: 0,
+      };
+
+      mockDatabaseService.user.findFirst.mockResolvedValueOnce({
+        id: 'deleted-user',
+        email: 'john@example.com',
+        phone: '+258841234567',
+        deletedAt: new Date(),
+      });
+      mockDatabaseService.user.update.mockResolvedValue({
+        id: 'deleted-user',
+      });
+      mockEncryptionService.createHash.mockResolvedValue('hashed-password');
+      mockDatabaseService.user.create.mockResolvedValue(createdUser);
+      mockDatabaseService.userOtp.deleteMany.mockResolvedValue({ count: 0 });
+      mockDatabaseService.userOtp.create.mockResolvedValue({ id: 'otp-id' });
+      mockEncryptionService.createJwtTokens.mockResolvedValue(tokens);
+
+      const result = await service.signup({
+        email: 'john@example.com',
+        password: 'Password1!',
+      });
+
+      expect(mockDatabaseService.user.update).toHaveBeenCalledWith({
+        where: { id: 'deleted-user' },
+        data: {
+          email: 'deleted-deleted-user@deleted.local',
+          phone: null,
+        },
+      });
+      expect(mockDatabaseService.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'john@example.com',
+        }),
+      });
+      expect(result).toEqual({
+        ...tokens,
+        user: createdUser,
+      });
+    });
+
+    it('should release a soft-deleted phone before creating a new account', async () => {
+      const tokens = {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      };
+      const createdUser = {
+        id: 'new-user',
+        email: 'john@example.com',
+        phone: '+258841234567',
+        role: Role.USER,
+        tokenVersion: 0,
+      };
+
+      mockDatabaseService.user.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'deleted-phone-user',
+          phone: '+258841234567',
+          deletedAt: new Date(),
+        });
+      mockDatabaseService.user.update.mockResolvedValue({
+        id: 'deleted-phone-user',
+      });
+      mockEncryptionService.createHash.mockResolvedValue('hashed-password');
+      mockDatabaseService.user.create.mockResolvedValue(createdUser);
+      mockDatabaseService.userOtp.deleteMany.mockResolvedValue({ count: 0 });
+      mockDatabaseService.userOtp.create.mockResolvedValue({ id: 'otp-id' });
+      mockEncryptionService.createJwtTokens.mockResolvedValue(tokens);
+
+      await service.signup({
+        email: 'john@example.com',
+        password: 'Password1!',
+        phone: '+258841234567',
+      });
+
+      expect(mockDatabaseService.user.update).toHaveBeenCalledWith({
+        where: { id: 'deleted-phone-user' },
+        data: {
+          email: 'deleted-deleted-phone-user@deleted.local',
+          phone: null,
+        },
+      });
+      expect(mockDatabaseService.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'john@example.com',
+          phone: '+258841234567',
+        }),
+      });
+    });
+
+    it('should map unique constraint errors to user exists', async () => {
+      mockDatabaseService.user.findFirst.mockResolvedValue(null);
+      mockEncryptionService.createHash.mockResolvedValue('hashed-password');
+      mockDatabaseService.user.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          clientVersion: 'test',
+          code: 'P2002',
+        })
+      );
+
+      await expect(
+        service.signup({
+          email: 'john@example.com',
+          password: 'Password1!',
+        })
+      ).rejects.toMatchObject({
+        message: 'user.error.userExists',
+        status: HttpStatus.CONFLICT,
       });
     });
 

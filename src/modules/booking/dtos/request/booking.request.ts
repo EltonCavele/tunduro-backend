@@ -14,7 +14,6 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateIf,
 } from 'class-validator';
 
 export class BookingAdminCreateRequestDto {
@@ -38,11 +37,10 @@ export class BookingAdminCreateRequestDto {
 
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Obrigatório quando paymentMethod=MPESA',
+    description: 'Opcional; PaySuite recolhe o numero no checkout',
   })
-  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   phone?: string;
 
   @ApiPropertyOptional({
@@ -96,11 +94,10 @@ export class BookingCreateRequestDto {
 
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Obrigatório quando paymentMethod=MPESA',
+    description: 'Opcional; PaySuite recolhe o numero no checkout',
   })
-  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   phone?: string;
 
   @ApiPropertyOptional({
@@ -229,11 +226,10 @@ export class BookingInvitationRespondDto {
 export class BookingExtendRequestDto {
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Obrigatório quando paymentMethod=MPESA',
+    description: 'Opcional; PaySuite recolhe o numero no checkout',
   })
-  @ValidateIf(o => (o.paymentMethod ?? PaymentMethod.MPESA) === PaymentMethod.MPESA)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   phone?: string;
 
   @ApiPropertyOptional({

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   Post,
@@ -10,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
+import { DocGenericResponse } from 'src/common/doc/decorators/doc.generic.decorator';
 import { DocPaginatedResponse } from 'src/common/doc/decorators/doc.paginated.decorator';
 import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
 import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
@@ -18,6 +20,7 @@ import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 
 import { UserChangePasswordDto } from '../dtos/request/user.change-password.request';
+import { UserDeleteAccountDto } from '../dtos/request/user.delete-account.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
 import {
@@ -127,6 +130,20 @@ export class UserPublicController {
     @Body() payload: UserChangePasswordDto
   ): Promise<ApiGenericResponseDto> {
     return this.userService.changePassword(user.userId, payload);
+  }
+
+  @Delete('me')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Delete the logged-in user account' })
+  @DocGenericResponse({
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.deleted',
+  })
+  public async deleteMyAccount(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: UserDeleteAccountDto
+  ): Promise<ApiGenericResponseDto> {
+    return this.userService.deleteOwnAccount(user.userId, payload);
   }
 
   @Put('notification-preferences')

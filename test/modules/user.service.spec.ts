@@ -1,7 +1,11 @@
 import { HttpException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Role } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
+import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
+import { HelperNotificationService } from 'src/common/helper/services/helper.notification.service';
 import { UserNotificationPreferencesUpdateDto } from 'src/modules/user/dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from 'src/modules/user/dtos/request/user.update.request';
 import { UserService } from 'src/modules/user/services/user.service';
@@ -13,10 +17,24 @@ describe('UserService', () => {
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      create: jest.fn(),
+      delete: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
     },
+  };
+  const mockEncryptionService = {
+    match: jest.fn(),
+    createHash: jest.fn(),
+  };
+  const mockNotificationService = {
+    isPushEnabled: jest.fn(),
+    sendPush: jest.fn(),
+    sendEmail: jest.fn(),
+  };
+  const mockConfigService = {
+    get: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,6 +42,12 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: DatabaseService, useValue: mockPrismaService },
+        { provide: HelperEncryptionService, useValue: mockEncryptionService },
+        {
+          provide: HelperNotificationService,
+          useValue: mockNotificationService,
+        },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -33,6 +57,54 @@ describe('UserService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('createUserByAdmin', () => {
+    it('should release a soft-deleted email before creating a user', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValueOnce({
+        id: 'deleted-user',
+        email: 'john@example.com',
+        phone: '+258841234567',
+        deletedAt: new Date(),
+      });
+      mockPrismaService.user.update.mockResolvedValue({ id: 'deleted-user' });
+      mockEncryptionService.createHash.mockResolvedValue('hashed-password');
+      mockPrismaService.user.create.mockResolvedValue({
+        id: 'new-user',
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: null,
+        role: Role.USER,
+      });
+      mockNotificationService.sendEmail.mockResolvedValue({
+        success: true,
+      });
+      mockConfigService.get.mockReturnValue('');
+
+      const result = await service.createUserByAdmin('admin-id', {
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+      });
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'deleted-user' },
+        data: {
+          email: 'deleted-deleted-user@deleted.local',
+          phone: null,
+        },
+      });
+      expect(mockPrismaService.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'john@example.com',
+          password: 'hashed-password',
+          role: Role.USER,
+          isVerified: true,
+        }),
+      });
+      expect(result.email).toBe('john@example.com');
+    });
   });
 
   describe('updateUser', () => {
@@ -122,6 +194,97 @@ describe('UserService', () => {
         where: { id: '123' },
         data: { deletedAt: expect.any(Date) },
       });
+    });
+  });
+
+  describe('deleteOwnAccount', () => {
+    it('should soft delete the current user and invalidate sessions', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-id',
+        email: 'john@example.com',
+        password: 'hashed-password',
+        role: Role.USER,
+        deletedAt: null,
+      });
+      mockEncryptionService.match.mockResolvedValue(true);
+      mockPrismaService.user.update.mockResolvedValue({
+        id: 'user-id',
+        deletedAt: new Date(),
+      });
+
+      const result = await service.deleteOwnAccount('user-id', {
+        currentPassword: 'Password1!',
+      });
+
+      expect(mockEncryptionService.match).toHaveBeenCalledWith(
+        'hashed-password',
+        'Password1!'
+      );
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-id' },
+        data: {
+          deletedAt: expect.any(Date),
+          email: 'deleted-user-id@deleted.local',
+          expoPushToken: null,
+          phone: null,
+          tokenVersion: { increment: 1 },
+        },
+      });
+      expect(result).toEqual({
+        success: true,
+        message: 'user.success.userDeleted',
+      });
+    });
+
+    it('should reject invalid current password', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-id',
+        password: 'hashed-password',
+        role: Role.MEMBER,
+        deletedAt: null,
+      });
+      mockEncryptionService.match.mockResolvedValue(false);
+
+      await expect(
+        service.deleteOwnAccount('user-id', {
+          currentPassword: 'wrong-password',
+        })
+      ).rejects.toThrow(HttpException);
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+    });
+
+    it.each([Role.ADMIN, Role.EMPLOYEE])(
+      'should reject %s users',
+      async role => {
+        mockPrismaService.user.findUnique.mockResolvedValue({
+          id: 'staff-id',
+          password: 'hashed-password',
+          role,
+          deletedAt: null,
+        });
+
+        await expect(
+          service.deleteOwnAccount('staff-id', {
+            currentPassword: 'Password1!',
+          })
+        ).rejects.toThrow(HttpException);
+        expect(mockEncryptionService.match).not.toHaveBeenCalled();
+        expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+      }
+    );
+
+    it('should reject missing or already deleted users', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-id',
+        deletedAt: new Date(),
+      });
+
+      await expect(
+        service.deleteOwnAccount('user-id', {
+          currentPassword: 'Password1!',
+        })
+      ).rejects.toThrow(HttpException);
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
     });
   });
 

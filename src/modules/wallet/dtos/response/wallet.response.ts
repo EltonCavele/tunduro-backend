@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WalletTransactionType } from '@prisma/client';
+import {
+  PaymentMethod,
+  WalletTopUpSessionStatus,
+  WalletTransactionType,
+} from '@prisma/client';
 import { Expose, Transform, Type } from 'class-transformer';
 
 const toNumber = ({ value }: { value: unknown }): unknown => {
@@ -96,4 +100,72 @@ export class WalletResponseDto {
   @Expose()
   @Type(() => WalletTransactionResponseDto)
   transactions: WalletTransactionResponseDto[];
+}
+
+export class WalletTopUpSessionResponseDto {
+  @ApiProperty()
+  @Expose()
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  userId: string;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(toNumber)
+  amount: number;
+
+  @ApiProperty()
+  @Expose()
+  currency: string;
+
+  @ApiProperty()
+  @Expose()
+  reference: string;
+
+  @ApiProperty({ enum: WalletTopUpSessionStatus })
+  @Expose()
+  status: WalletTopUpSessionStatus;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(toDate)
+  expiresAt: Date;
+
+  @ApiPropertyOptional()
+  @Expose()
+  checkoutUrl: string | null;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @Expose()
+  paymentMethod: PaymentMethod | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  phone: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  failureReason: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  @Transform(toDate)
+  paidAt: Date | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  @Transform(toDate)
+  completedAt: Date | null;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(toDate)
+  createdAt: Date;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(toDate)
+  updatedAt: Date;
 }

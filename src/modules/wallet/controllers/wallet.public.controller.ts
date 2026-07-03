@@ -1,4 +1,11 @@
-import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { DocResponse } from 'src/common/doc/decorators/doc.response.decorator';
@@ -6,7 +13,10 @@ import { AuthUser } from 'src/common/request/decorators/request.user.decorator';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 
 import { WalletSelfTopUpRequestDto } from '../dtos/request/wallet.request';
-import { WalletResponseDto } from '../dtos/response/wallet.response';
+import {
+  WalletResponseDto,
+  WalletTopUpSessionResponseDto,
+} from '../dtos/response/wallet.response';
 import { WalletService } from '../services/wallet.service';
 
 @ApiTags('public.wallet')
@@ -31,16 +41,46 @@ export class WalletPublicController {
 
   @Post('me/top-ups')
   @ApiBearerAuth('accessToken')
-  @ApiOperation({ summary: 'Top up current user club balance via M-Pesa' })
+  @ApiOperation({ summary: 'Top up current user club balance' })
   @DocResponse({
-    serialization: WalletResponseDto,
+    serialization: WalletTopUpSessionResponseDto,
     httpStatus: HttpStatus.CREATED,
     messageKey: 'wallet.success.topUp',
   })
   async topUpMyWallet(
     @AuthUser() user: IAuthUser,
     @Body() dto: WalletSelfTopUpRequestDto
-  ): Promise<WalletResponseDto> {
+  ): Promise<WalletTopUpSessionResponseDto> {
     return this.walletService.selfTopUp(user.userId, dto);
+  }
+
+  @Get('me/top-ups/:sessionId')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get current user wallet top-up session' })
+  @DocResponse({
+    serialization: WalletTopUpSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'wallet.success.topUp',
+  })
+  async getMyTopUpSession(
+    @AuthUser() user: IAuthUser,
+    @Param('sessionId') sessionId: string
+  ): Promise<WalletTopUpSessionResponseDto> {
+    return this.walletService.getTopUpSession(user.userId, sessionId);
+  }
+
+  @Post('me/top-ups/:sessionId/refresh')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Refresh current user wallet top-up session' })
+  @DocResponse({
+    serialization: WalletTopUpSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'wallet.success.topUp',
+  })
+  async refreshMyTopUpSession(
+    @AuthUser() user: IAuthUser,
+    @Param('sessionId') sessionId: string
+  ): Promise<WalletTopUpSessionResponseDto> {
+    return this.walletService.refreshTopUpSession(user.userId, sessionId);
   }
 }

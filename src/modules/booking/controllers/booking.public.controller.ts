@@ -42,7 +42,7 @@ export class BookingPublicController {
   @ApiBearerAuth('accessToken')
   @ApiOperation({
     summary:
-      'Iniciar checkout: cria BookingCheckoutSession OPEN e dispara o débito M-Pesa em background',
+      'Iniciar checkout: cria BookingCheckoutSession OPEN e prepara pagamento PaySuite em background',
     description:
       'Não cria Booking. Use GET /bookings/checkout/:sessionId para fazer polling ao estado. Quando status === COMPLETED, bookingId é populado.',
   })
@@ -73,6 +73,23 @@ export class BookingPublicController {
     @Param('sessionId') sessionId: string
   ): Promise<BookingCheckoutSessionResponseDto> {
     return this.bookingService.getCheckoutSession(user, sessionId);
+  }
+
+  @Post('/bookings/checkout/:sessionId/refresh')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Atualizar estado de uma BookingCheckoutSession no PaySuite',
+  })
+  @DocResponse({
+    serialization: BookingCheckoutSessionResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'booking.success.checkoutDetails',
+  })
+  async refreshCheckoutSession(
+    @AuthUser() user: IAuthUser,
+    @Param('sessionId') sessionId: string
+  ): Promise<BookingCheckoutSessionResponseDto> {
+    return this.bookingService.refreshCheckoutSession(user, sessionId);
   }
 
   @Get('/bookings/me')
@@ -207,7 +224,7 @@ export class BookingPublicController {
   @ApiOperation({
     summary: 'Prolongar reserva em curso (+1 hora)',
     description:
-      'Disponível 10 minutos antes do fim até 10 minutos depois, se a hora seguinte estiver livre. Cria checkout M-Pesa e devolve sessionId para polling.',
+      'Disponível 10 minutos antes do fim até 10 minutos depois, se a hora seguinte estiver livre. Cria checkout PaySuite e devolve sessionId para polling.',
   })
   @DocResponse({
     serialization: BookingCheckoutSessionResponseDto,

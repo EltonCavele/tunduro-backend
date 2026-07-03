@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -50,9 +58,7 @@ export class BookingAdminController {
     httpStatus: HttpStatus.OK,
     messageKey: 'booking.success.found',
   })
-  async getBooking(
-    @Param('id') id: string
-  ): Promise<BookingResponseDto> {
+  async getBooking(@Param('id') id: string): Promise<BookingResponseDto> {
     return this.bookingService.adminGetBooking(id);
   }
 
@@ -61,7 +67,7 @@ export class BookingAdminController {
   @ApiBearerAuth('accessToken')
   @ApiOperation({
     summary:
-      'Iniciar checkout para utilizador (admin): cria BookingCheckoutSession OPEN e dispara o débito M-Pesa em background',
+      'Iniciar checkout para utilizador (admin): cria BookingCheckoutSession OPEN e prepara pagamento PaySuite em background',
     description:
       'Não cria Booking. Use GET /admin/booking/checkout/:sessionId para fazer polling. Quando status === COMPLETED, bookingId é populado.',
   })

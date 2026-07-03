@@ -45,6 +45,7 @@ enum PaymentStatus {
 
 enum PaymentType {
   BOOKING
+  WALLET_TOP_UP
   RESCHEDULE_FEE
   RESCHEDULE_DIFFERENCE
   CANCELLATION_REFUND
@@ -117,6 +118,13 @@ enum BookingCheckoutSessionStatus {
   REFUNDED
 }
 
+enum WalletTopUpSessionStatus {
+  OPEN
+  PAYMENT_FAILED
+  COMPLETED
+  EXPIRED
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -158,6 +166,7 @@ model User {
   wallet                  Wallet?
   walletTransactions      WalletTransaction[]      @relation("WalletOwner")
   walletAdminTransactions WalletTransaction[]      @relation("WalletCreatedBy")
+  walletTopUpSessions     WalletTopUpSession[]
 
   @@map("users")
 }
@@ -327,7 +336,9 @@ model BookingStatusHistory {
 
 model PaymentTransaction {
   id                    String          @id @default(uuid())
-  bookingId             String
+  bookingId             String?
+  checkoutSessionId     String?         @unique
+  walletTopUpSessionId  String?         @unique
   userId                String
   type                  PaymentType
   status                PaymentStatus   @default(PENDING)
@@ -346,9 +357,11 @@ model PaymentTransaction {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  booking       Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  user          User    @relation(fields: [userId], references: [id])
-  confirmedByUser User? @relation("ConfirmedPayments", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+  booking            Booking?                @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  checkoutSession    BookingCheckoutSession? @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
+  walletTopUpSession WalletTopUpSession?     @relation(fields: [walletTopUpSessionId], references: [id], onDelete: SetNull)
+  user               User                    @relation(fields: [userId], references: [id])
+  confirmedByUser    User?                   @relation("ConfirmedPayments", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
 
   @@index([bookingId, status])
   @@index([userId, type])
@@ -477,6 +490,8 @@ model BookingCheckoutSession {
   court     Court    @relation(fields: [courtId], references: [id])
   booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
 
+  paymentTransactions PaymentTransaction[]
+
   @@index([courtId, startAt, endAt, status])
   @@index([organizerId, startAt, status])
   @@index([status, expiresAt])
@@ -494,6 +509,37 @@ model Wallet {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("wallets")
+}
+
+model WalletTopUpSession {
+  id                    String                   @id @default(uuid())
+  userId                String
+  amount                Decimal                  @db.Decimal(10, 2)
+  currency              String                   @default("MZN")
+  reference             String                   @unique
+  status                WalletTopUpSessionStatus @default(OPEN)
+  expiresAt             DateTime
+  checkoutUrl           String?
+  paymentMethod         PaymentMethod?
+  phone                 String?
+  providerPaymentId     String?
+  providerTransactionId String?
+  providerStatusCode    String?
+  providerMessage       String?
+  failureReason         String?
+  paidAt                DateTime?
+  completedAt           DateTime?
+  metadata              Json?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  paymentTransactions PaymentTransaction[]
+
+  @@index([userId, status, createdAt])
+  @@index([status, expiresAt])
+  @@map("wallet_top_up_sessions")
 }
 
 model WalletTransaction {

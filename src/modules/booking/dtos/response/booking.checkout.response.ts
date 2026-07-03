@@ -1,8 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  BookingCheckoutSessionStatus,
-  PaymentMethod,
-} from '@prisma/client';
+import { BookingCheckoutSessionStatus, PaymentMethod } from '@prisma/client';
 import { Expose, Transform } from 'class-transformer';
 
 const toNumber = ({ value }: { value: unknown }): unknown => {
@@ -102,6 +99,10 @@ export class BookingCheckoutSessionResponseDto {
   @Expose()
   @Transform(maskPhone)
   phone: string | null;
+
+  @ApiPropertyOptional()
+  @Expose()
+  checkoutUrl: string | null;
 
   @ApiPropertyOptional()
   @Expose()

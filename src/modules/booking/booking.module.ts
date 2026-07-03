@@ -10,6 +10,7 @@ import { WalletModule } from 'src/modules/wallet/wallet.module';
 import { BookingPublicController } from './controllers/booking.public.controller';
 import { BookingAdminController } from './controllers/booking.admin.controller';
 import { BookingAvailabilityService } from './services/booking-availability.service';
+import { BookingCheckoutRefreshService } from './services/booking-checkout-refresh.service';
 import { BookingCheckoutService } from './services/booking-checkout.service';
 import { BookingInvitationService } from './services/booking-invitation.service';
 import { BookingService } from './services/booking.service';
@@ -28,6 +29,7 @@ import { BookingService } from './services/booking.service';
     BookingService,
     BookingAvailabilityService,
     BookingCheckoutService,
+    BookingCheckoutRefreshService,
     BookingInvitationService,
   ],
   exports: [BookingService],

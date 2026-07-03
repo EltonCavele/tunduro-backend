@@ -5,6 +5,7 @@
   },
   "error": {
     "invalidAmount": "O valor da carteira deve ser maior que zero",
-    "insufficientBalance": "Saldo do clube insuficiente"
+    "insufficientBalance": "Saldo do clube insuficiente",
+    "topUpSessionNotFound": "Wallet top-up session not found"
   }
 }

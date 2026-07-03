@@ -6,8 +6,6 @@ import {
   BookingStatus,
   ParticipantStatus,
   PaymentMethod,
-  PaymentStatus,
-  PaymentType,
   Prisma,
 } from '@prisma/client';
 
@@ -17,13 +15,20 @@ import { LightingOrchestratorService } from 'src/modules/lighting/services/light
 import { BookingNotifierService } from 'src/modules/notification/services/booking.notifier.service';
 
 import { ChargeResult } from '../providers/payment.provider.interface';
+import { PaymentTransactionStateService } from './payment-transaction-state.service';
 
 export interface BookingCheckoutCompletion {
   bookingId: string | null;
   checkedInAt?: Date | null;
   createdInvitationIds: string[];
   isExtension: boolean;
+  skipSideEffects?: boolean;
 }
+
+const CHECKOUT_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 20_000,
+};
 
 @Injectable()
 export class BookingCheckoutFinalizerService {
@@ -32,7 +37,8 @@ export class BookingCheckoutFinalizerService {
   constructor(
     private readonly db: DatabaseService,
     private readonly bookingNotifier: BookingNotifierService,
-    private readonly lightingOrchestrator: LightingOrchestratorService
+    private readonly lightingOrchestrator: LightingOrchestratorService,
+    private readonly paymentTransactions: PaymentTransactionStateService
   ) {}
 
   async completeSuccessfulSession(
@@ -40,9 +46,32 @@ export class BookingCheckoutFinalizerService {
     method: PaymentMethod,
     result: ChargeResult
   ): Promise<BookingCheckoutCompletion> {
-    const completion = await this.db.$transaction(tx =>
-      this.applySuccessfulSession(tx, session, method, result)
-    );
+    const completion = await this.db.$transaction(async tx => {
+      const current = await tx.bookingCheckoutSession.findUnique({
+        where: { id: session.id },
+      });
+      if (!current) {
+        throw new Error(`Checkout session ${session.id} not found`);
+      }
+
+      const claimed = await tx.bookingCheckoutSession.updateMany({
+        where: {
+          id: session.id,
+          status: BookingCheckoutSessionStatus.OPEN,
+        },
+        data: { status: BookingCheckoutSessionStatus.FINALIZING },
+      });
+      if (claimed.count !== 1) {
+        return {
+          bookingId: current.bookingId,
+          createdInvitationIds: [],
+          isExtension: this.isExtensionSession(current),
+          skipSideEffects: true,
+        };
+      }
+
+      return this.applySuccessfulSession(tx, current, method, result);
+    }, CHECKOUT_TRANSACTION_OPTIONS);
 
     await this.dispatchCompletionSideEffects(completion);
 
@@ -65,6 +94,10 @@ export class BookingCheckoutFinalizerService {
   async dispatchCompletionSideEffects(
     completion: BookingCheckoutCompletion
   ): Promise<void> {
+    if (completion.skipSideEffects) {
+      return;
+    }
+
     if (!completion.bookingId) {
       return;
     }
@@ -119,7 +152,9 @@ export class BookingCheckoutFinalizerService {
   ): Promise<BookingCheckoutCompletion> {
     const targetBookingId = this.getExtensionTargetBookingId(session);
     if (!targetBookingId) {
-      throw new Error(`Extension session ${session.id} is missing targetBookingId`);
+      throw new Error(
+        `Extension session ${session.id} is missing targetBookingId`
+      );
     }
 
     const booking = await tx.booking.findUnique({
@@ -153,25 +188,13 @@ export class BookingCheckoutFinalizerService {
       },
     });
 
-    await tx.paymentTransaction.create({
-      data: {
-        bookingId: targetBookingId,
-        userId: session.organizerId,
-        type: PaymentType.OVERTIME_ADJUSTMENT,
-        status: PaymentStatus.COMPLETED,
-        amount: session.amount,
-        currency: session.currency,
-        reference: session.reference,
-        method,
-        phone: session.phone,
-        providerTransactionId: result.providerTransactionId ?? null,
-        providerStatusCode: result.providerStatusCode,
-        providerMessage: result.providerMessage,
-        processedAt: new Date(),
-        attempts: 1,
-        metadata: (session.metadata as Prisma.InputJsonValue) ?? undefined,
-      },
-    });
+    await this.paymentTransactions.completeCheckoutPayment(
+      tx,
+      session,
+      targetBookingId,
+      method,
+      result
+    );
 
     await tx.bookingCheckoutSession.update({
       where: { id: session.id },
@@ -229,27 +252,21 @@ export class BookingCheckoutFinalizerService {
       },
     });
 
-    await tx.paymentTransaction.create({
-      data: {
-        bookingId: booking.id,
-        userId: session.organizerId,
-        type: PaymentType.BOOKING,
-        status: PaymentStatus.COMPLETED,
-        amount: session.amount,
-        currency: session.currency,
-        reference: session.reference,
-        method,
-        phone: session.phone,
-        providerTransactionId: result.providerTransactionId ?? null,
-        providerStatusCode: result.providerStatusCode,
-        providerMessage: result.providerMessage,
-        processedAt: new Date(),
-        attempts: 1,
-        metadata: (session.metadata as Prisma.InputJsonValue) ?? undefined,
-      },
-    });
+    await this.paymentTransactions.completeCheckoutPayment(
+      tx,
+      session,
+      booking.id,
+      method,
+      result
+    );
 
-    await this.createInvitations(tx, session, booking.id, booking.startAt, createdInvitationIds);
+    await this.createInvitations(
+      tx,
+      session,
+      booking.id,
+      booking.startAt,
+      createdInvitationIds
+    );
 
     await tx.bookingCheckoutSession.update({
       where: { id: session.id },
@@ -305,7 +322,11 @@ export class BookingCheckoutFinalizerService {
 
     const userIdSet = new Set<string>();
     for (const userId of participantUserIds) {
-      if (typeof userId === 'string' && userId && userId !== session.organizerId) {
+      if (
+        typeof userId === 'string' &&
+        userId &&
+        userId !== session.organizerId
+      ) {
         userIdSet.add(userId);
       }
     }
@@ -339,7 +360,9 @@ export class BookingCheckoutFinalizerService {
 
     const emailsWithoutUser = Array.from(
       new Set(
-        inviteEmails.filter(email => email !== organizerEmail && !emailToUserId.has(email))
+        inviteEmails.filter(
+          email => email !== organizerEmail && !emailToUserId.has(email)
+        )
       )
     );
 

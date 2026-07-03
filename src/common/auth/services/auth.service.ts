@@ -5,10 +5,11 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { $Enums, Role } from '@prisma/client';
+import { $Enums, Prisma, Role } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
+import { getDeletedUserEmail } from 'src/modules/user/helpers/user-anonymization.helper';
 
 import { HelperEncryptionService } from '../../helper/services/helper.encryption.service';
 import { HelperNotificationService } from '../../helper/services/helper.notification.service';
@@ -89,11 +90,18 @@ export class AuthService implements IAuthService {
     const existingByEmail = await this.databaseService.user.findFirst({
       where: {
         email,
-        deletedAt: null,
       },
     });
 
-    if (existingByEmail) {
+    if (existingByEmail?.deletedAt) {
+      await this.databaseService.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          email: getDeletedUserEmail(existingByEmail.id),
+          phone: null,
+        },
+      });
+    } else if (existingByEmail) {
       throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
     }
 
@@ -101,29 +109,44 @@ export class AuthService implements IAuthService {
       const existingByPhone = await this.databaseService.user.findFirst({
         where: {
           phone,
-          deletedAt: null,
         },
       });
 
-      if (existingByPhone) {
+      if (existingByPhone?.deletedAt) {
+        await this.databaseService.user.update({
+          where: { id: existingByPhone.id },
+          data: {
+            email: getDeletedUserEmail(existingByPhone.id),
+            phone: null,
+          },
+        });
+      } else if (existingByPhone) {
         throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
       }
     }
 
     const hashed = await this.helperEncryptionService.createHash(data.password);
 
-    const createdUser = await this.databaseService.user.create({
-      data: {
-        email,
-        password: hashed,
-        firstName: data.firstName?.trim(),
-        lastName: data.lastName?.trim(),
-        phone,
-        gender: data.gender ?? $Enums.Gender.OTHER,
-        role: Role.USER,
-        tokenVersion: 0,
-      } as any,
-    });
+    let createdUser: any;
+    try {
+      createdUser = await this.databaseService.user.create({
+        data: {
+          email,
+          password: hashed,
+          firstName: data.firstName?.trim(),
+          lastName: data.lastName?.trim(),
+          phone,
+          gender: data.gender ?? $Enums.Gender.OTHER,
+          role: Role.USER,
+          tokenVersion: 0,
+        } as any,
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
+      }
+      throw error;
+    }
 
     const verificationOtp = await this.createOtp(
       createdUser.id,
@@ -393,6 +416,13 @@ export class AuthService implements IAuthService {
 
   private getTokenVersion(user: { tokenVersion?: number }): number {
     return Number(user?.tokenVersion ?? 0);
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 
   private async createOtp(userId: string, otpPrefix: string): Promise<string> {

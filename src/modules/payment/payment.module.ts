@@ -6,12 +6,14 @@ import { LightingModule } from 'src/modules/lighting/lighting.module';
 import { NotificationModule } from 'src/modules/notification/notification.module';
 
 import { PaymentPublicController } from './controllers/payment.public.controller';
-import { MpesaProvider } from './providers/mpesa/mpesa.provider';
 import { PaymentProviderFactory } from './providers/payment.provider.factory';
+import { PaysuiteProvider } from './providers/paysuite/paysuite.provider';
 import { PaymentProcessor } from './queues/payment.processor';
 import { PAYMENT_QUEUE, PaymentQueue } from './queues/payment.queue';
 import { BookingCheckoutFinalizerService } from './services/booking-checkout-finalizer.service';
 import { PaymentService } from './services/payment.service';
+import { PaymentTransactionStateService } from './services/payment-transaction-state.service';
+import { PaysuiteWebhookService } from './services/paysuite-webhook.service';
 
 @Module({
   imports: [
@@ -23,17 +25,20 @@ import { PaymentService } from './services/payment.service';
   controllers: [PaymentPublicController],
   providers: [
     PaymentService,
-    MpesaProvider,
+    PaysuiteProvider,
+    PaysuiteWebhookService,
     PaymentProviderFactory,
     PaymentQueue,
     PaymentProcessor,
     BookingCheckoutFinalizerService,
+    PaymentTransactionStateService,
   ],
   exports: [
     PaymentService,
     PaymentQueue,
     PaymentProviderFactory,
     BookingCheckoutFinalizerService,
+    PaymentTransactionStateService,
   ],
 })
 export class PaymentModule {}

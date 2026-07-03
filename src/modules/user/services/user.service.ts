@@ -13,6 +13,7 @@ import { HelperNotificationService } from 'src/common/helper/services/helper.not
 
 import { UserAdminCreateDto } from '../dtos/request/user.admin-create.request';
 import { UserChangePasswordDto } from '../dtos/request/user.change-password.request';
+import { UserDeleteAccountDto } from '../dtos/request/user.delete-account.request';
 import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
@@ -22,96 +23,20 @@ import {
   UserNotificationPreferencesResponseDto,
   UserUpdateProfileResponseDto,
 } from '../dtos/response/user.response';
+import { USER_CREDENTIALS_EMAIL_TEMPLATE } from '../constants/user-email-template.constant';
+import {
+  USER_LIST_ALLOWED_SORT_FIELDS,
+  USER_LIST_DEFAULT_PAGE,
+  USER_LIST_DEFAULT_PAGE_SIZE,
+  USER_LIST_DEFAULT_SORT_BY,
+  USER_LIST_MAX_PAGE_SIZE,
+} from '../constants/user-list.constant';
+import { getDeletedUserEmail } from '../helpers/user-anonymization.helper';
+import {
+  getPreferencesFromUser,
+  normalizeUser,
+} from '../helpers/user-mapper.helper';
 import { IUserService } from '../interfaces/user.service.interface';
-
-const USER_CREDENTIALS_EMAIL_TEMPLATE = `<!DOCTYPE html>
-<html lang="pt">
-<head>
-  <meta charset="UTF-8" />
-  <title>Credenciais de Acesso</title>
-</head>
-<body style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
-
-  <table width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center">
-
-        <table width="600" cellpadding="0" cellspacing="0" 
-          style="background:#ffffff; border-radius:10px; padding:40px;">
-
-          <tr>
-            <td align="center">
-              <h1 style="color:#1e3a8a;">
-                Campos de Ténis Tunduro
-              </h1>
-            </td>
-          </tr>
-
-          <tr>
-            <td>
-              <p>Olá <strong>{{nome}}</strong>,</p>
-
-              <p>
-                A sua conta foi criada com sucesso na plataforma 
-                <strong>Campos de Ténis Tunduro</strong>.
-              </p>
-
-              <p>Use as credenciais abaixo para acessar o sistema:</p>
-
-              <div style="
-                background:#f3f4f6;
-                padding:20px;
-                border-radius:8px;
-                margin:20px 0;
-              ">
-                <p><strong>Email:</strong> {{email}}</p>
-                <p><strong>Senha:</strong> {{senha}}</p>
-              </div>
-
-              <p>
-                Recomendamos alterar a senha após o primeiro login.
-              </p>
-
-              <p>
-                Clique no botão abaixo para acessar o sistema:
-              </p>
-
-              <p style="text-align:center; margin:30px 0;">
-                <a href="{{frontend_url}}" 
-                  style="
-                    background:#2563eb;
-                    color:white;
-                    padding:12px 24px;
-                    text-decoration:none;
-                    border-radius:6px;
-                    display:inline-block;
-                  ">
-                  Acessar Plataforma
-                </a>
-              </p>
-
-              <p>
-                Caso tenha alguma dificuldade, entre em contacto com o administrador.
-              </p>
-
-              <br />
-
-              <p>
-                Atenciosamente,<br />
-                <strong>Equipa Campos de Ténis Tunduro</strong>
-              </p>
-            </td>
-          </tr>
-
-        </table>
-
-      </td>
-    </tr>
-  </table>
-
-</body>
-</html>
-`;
 
 @Injectable()
 export class UserService implements IUserService {
@@ -139,23 +64,17 @@ export class UserService implements IUserService {
     }
 
     const existingByEmail = await this.databaseService.user.findFirst({
-      where: {
-        email,
-        deletedAt: null,
-      },
+      where: { email },
     });
-    if (existingByEmail) {
+    if (await this.releaseDeletedContactOrHasActive(existingByEmail)) {
       throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
     }
 
     if (phone) {
       const existingByPhone = await this.databaseService.user.findFirst({
-        where: {
-          phone,
-          deletedAt: null,
-        },
+        where: { phone },
       });
-      if (existingByPhone) {
+      if (await this.releaseDeletedContactOrHasActive(existingByPhone)) {
         throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
       }
     }
@@ -163,19 +82,27 @@ export class UserService implements IUserService {
     const plainPassword = this.generatePassword();
     const hashed = await this.helperEncryptionService.createHash(plainPassword);
 
-    const createdUser = await this.databaseService.user.create({
-      data: {
-        email,
-        password: hashed,
-        firstName: data.firstName?.trim() ?? null,
-        lastName: data.lastName?.trim() ?? null,
-        phone: phone ?? null,
-        gender: data.gender ?? $Enums.Gender.OTHER,
-        role,
-        isVerified: true,
-        tokenVersion: 0,
-      } as any,
-    });
+    let createdUser: any;
+    try {
+      createdUser = await this.databaseService.user.create({
+        data: {
+          email,
+          password: hashed,
+          firstName: data.firstName?.trim() ?? null,
+          lastName: data.lastName?.trim() ?? null,
+          phone: phone ?? null,
+          gender: data.gender ?? $Enums.Gender.OTHER,
+          role,
+          isVerified: true,
+          tokenVersion: 0,
+        } as any,
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
+      }
+      throw error;
+    }
 
     const frontendUrl =
       this.configService.get<string>('app.frontendUrl') ??
@@ -208,7 +135,7 @@ export class UserService implements IUserService {
     }
 
     void adminId;
-    return this.normalizeUser(createdUser) as UserGetProfileResponseDto;
+    return normalizeUser(createdUser) as UserGetProfileResponseDto;
   }
 
   async updateUser(
@@ -259,7 +186,7 @@ export class UserService implements IUserService {
       } as any,
     });
 
-    return this.normalizeUser(updatedUser) as UserUpdateProfileResponseDto;
+    return normalizeUser(updatedUser) as UserUpdateProfileResponseDto;
   }
 
   async getNotificationPreferences(
@@ -272,7 +199,7 @@ export class UserService implements IUserService {
       throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
     }
 
-    return this.getPreferencesFromUser(user);
+    return getPreferencesFromUser(user);
   }
 
   async updateNotificationPreferences(
@@ -298,7 +225,7 @@ export class UserService implements IUserService {
     }
 
     if (Object.keys(updateData).length === 0) {
-      return this.getPreferencesFromUser(user);
+      return getPreferencesFromUser(user);
     }
 
     const updatedUser = await this.databaseService.user.update({
@@ -306,7 +233,7 @@ export class UserService implements IUserService {
       data: updateData as any,
     });
 
-    return this.getPreferencesFromUser(updatedUser);
+    return getPreferencesFromUser(updatedUser);
   }
 
   async changePassword(
@@ -354,6 +281,46 @@ export class UserService implements IUserService {
     return ApiGenericResponseDto.success('user.success.passwordChanged');
   }
 
+  async deleteOwnAccount(
+    userId: string,
+    data: UserDeleteAccountDto
+  ): Promise<ApiGenericResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+
+    if (user.role !== Role.USER && user.role !== Role.MEMBER) {
+      throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
+    }
+
+    const matched = await this.helperEncryptionService.match(
+      (user as { password: string }).password,
+      data.currentPassword
+    );
+    if (!matched) {
+      throw new HttpException(
+        'user.error.invalidCurrentPassword',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        email: getDeletedUserEmail(userId),
+        expoPushToken: null,
+        phone: null,
+        tokenVersion: { increment: 1 },
+      } as any,
+    });
+
+    return ApiGenericResponseDto.success('user.success.userDeleted');
+  }
+
   async updateExpoPushToken(
     userId: string,
     data: UserExpoPushTokenUpdateDto
@@ -373,11 +340,6 @@ export class UserService implements IUserService {
     return { expoPushToken: updated.expoPushToken as string };
   }
 
-  /**
-   * Smoke test do push: envia uma notificação para o expoPushToken do user
-   * autenticado, ignorando a flag notifyPush. Útil para diagnosticar
-   * config Expo / token inválido sem ter de gerar um booking.
-   */
   async sendTestPush(userId: string): Promise<{
     pushEnabled: boolean;
     hasExpoPushToken: boolean;
@@ -424,33 +386,24 @@ export class UserService implements IUserService {
   }
 
   async deleteUser(userId: string): Promise<ApiGenericResponseDto> {
-    try {
-      const user = await this.databaseService.user.findUnique({
-        where: { id: userId },
-      });
-      if (!user) {
-        throw new HttpException(
-          'user.error.userNotFound',
-          HttpStatus.NOT_FOUND
-        );
-      }
-      await this.databaseService.user.update({
-        where: { id: userId },
-        data: { deletedAt: new Date() },
-      });
-
-      return {
-        success: true,
-        message: 'user.success.userDeleted',
-      };
-    } catch (error) {
-      throw error;
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
     }
+
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: { deletedAt: new Date() },
+    });
+
+    return ApiGenericResponseDto.success('user.success.userDeleted');
   }
 
   async suspendUser(
     userId: string,
-    suspendedBy: string
+    _suspendedBy: string
   ): Promise<ApiGenericResponseDto> {
     const user = await this.databaseService.user.findUnique({
       where: { id: userId },
@@ -459,7 +412,10 @@ export class UserService implements IUserService {
       throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
     }
     if (user.suspendedAt) {
-      throw new HttpException('user.error.alreadySuspended', HttpStatus.CONFLICT);
+      throw new HttpException(
+        'user.error.alreadySuspended',
+        HttpStatus.CONFLICT
+      );
     }
     if (user.role === Role.ADMIN) {
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
@@ -470,15 +426,12 @@ export class UserService implements IUserService {
       data: { suspendedAt: new Date() },
     });
 
-    return {
-      success: true,
-      message: 'user.success.userSuspended',
-    };
+    return ApiGenericResponseDto.success('user.success.userSuspended');
   }
 
   async unsuspendUser(
     userId: string,
-    unsuspendedBy: string
+    _unsuspendedBy: string
   ): Promise<ApiGenericResponseDto> {
     const user = await this.databaseService.user.findUnique({
       where: { id: userId },
@@ -495,10 +448,7 @@ export class UserService implements IUserService {
       data: { suspendedAt: null },
     });
 
-    return {
-      success: true,
-      message: 'user.success.userUnsuspended',
-    };
+    return ApiGenericResponseDto.success('user.success.userUnsuspended');
   }
 
   async getProfile(id: string): Promise<UserGetProfileResponseDto> {
@@ -508,7 +458,7 @@ export class UserService implements IUserService {
     if (!user || user.deletedAt) {
       throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
     }
-    return this.normalizeUser(user) as UserGetProfileResponseDto;
+    return normalizeUser(user) as UserGetProfileResponseDto;
   }
 
   async getListOfUsers(
@@ -524,23 +474,6 @@ export class UserService implements IUserService {
     role?: string,
     allowedRoles?: Role[]
   ): Promise<ApiPaginatedDataDto<UserGetProfileResponseDto>> {
-    const DEFAULT_PAGE = 1;
-    const DEFAULT_PAGE_SIZE = 10;
-    const MAX_PAGE_SIZE = 100;
-    const DEFAULT_SORT_BY: keyof Prisma.UserOrderByWithRelationInput =
-      'createdAt';
-    const ALLOWED_SORT_FIELDS = new Set<
-      keyof Prisma.UserOrderByWithRelationInput
-    >([
-      'firstName',
-      'lastName',
-      'phone',
-      'email',
-      'gender',
-      'createdAt',
-      'updatedAt',
-    ]);
-
     const parsedPage = Number(page);
     const parsedPageSize = Number(pageSize);
     const parsedOffset = Number(offset);
@@ -549,24 +482,26 @@ export class UserService implements IUserService {
     const safePage =
       Number.isInteger(parsedPage) && parsedPage > 0
         ? parsedPage
-        : DEFAULT_PAGE;
+        : USER_LIST_DEFAULT_PAGE;
 
     const safePageSize =
       Number.isInteger(parsedPageSize) && parsedPageSize > 0
-        ? Math.min(parsedPageSize, MAX_PAGE_SIZE)
-        : DEFAULT_PAGE_SIZE;
+        ? Math.min(parsedPageSize, USER_LIST_MAX_PAGE_SIZE)
+        : USER_LIST_DEFAULT_PAGE_SIZE;
 
     const hasOffset = Number.isInteger(parsedOffset) && parsedOffset >= 0;
     const hasLimit = Number.isInteger(parsedLimit) && parsedLimit > 0;
-    const take = hasLimit ? Math.min(parsedLimit, MAX_PAGE_SIZE) : safePageSize;
+    const take = hasLimit
+      ? Math.min(parsedLimit, USER_LIST_MAX_PAGE_SIZE)
+      : safePageSize;
     const skip = hasOffset ? parsedOffset : (safePage - 1) * take;
     const currentPage = hasOffset ? Math.floor(skip / take) + 1 : safePage;
 
-    const safeSortField = ALLOWED_SORT_FIELDS.has(
+    const safeSortField = USER_LIST_ALLOWED_SORT_FIELDS.has(
       sortBy as keyof Prisma.UserOrderByWithRelationInput
     )
       ? (sortBy as keyof Prisma.UserOrderByWithRelationInput)
-      : DEFAULT_SORT_BY;
+      : USER_LIST_DEFAULT_SORT_BY;
     const safeSortOrder: Prisma.SortOrder =
       sortOrder === 'asc' ? 'asc' : 'desc';
 
@@ -579,8 +514,7 @@ export class UserService implements IUserService {
         : undefined;
     const normalizedRole = role?.trim().toUpperCase();
     const safeRole =
-      normalizedRole &&
-      Object.values(Role).includes(normalizedRole as Role)
+      normalizedRole && Object.values(Role).includes(normalizedRole as Role)
         ? (normalizedRole as Role)
         : undefined;
     const safeAllowedRoles = Array.isArray(allowedRoles)
@@ -628,7 +562,7 @@ export class UserService implements IUserService {
 
     return {
       items: users.map(user =>
-        this.normalizeUser(user)
+        normalizeUser(user)
       ) as UserGetProfileResponseDto[],
       metadata: {
         currentPage,
@@ -639,32 +573,25 @@ export class UserService implements IUserService {
     };
   }
 
-  private getPreferencesFromUser(
-    user: Record<string, any>
-  ): UserNotificationPreferencesResponseDto {
-    return {
-      notifyPush: typeof user.notifyPush === 'boolean' ? user.notifyPush : true,
-      notifySms: typeof user.notifySms === 'boolean' ? user.notifySms : true,
-      notifyEmail:
-        typeof user.notifyEmail === 'boolean' ? user.notifyEmail : true,
-    };
-  }
-
-  private normalizeUser<T extends Record<string, any>>(user: T): T {
-    const { expoPushToken: _expoPushToken, ...safeUser } = user;
-    return {
-      ...safeUser,
-      avatarUrl: safeUser.avatarUrl ?? null,
-      level: safeUser.level ?? null,
-      favoriteCourt: safeUser.favoriteCourt ?? null,
-      preferredTimeSlots: Array.isArray(safeUser.preferredTimeSlots)
-        ? safeUser.preferredTimeSlots
-        : [],
-      ...this.getPreferencesFromUser(user),
-    } as unknown as T;
-  }
-
   private generatePassword(): string {
     return crypto.randomBytes(9).toString('base64url').slice(0, 12);
+  }
+
+  private async releaseDeletedContactOrHasActive(user: any): Promise<boolean> {
+    if (!user) return false;
+    if (!user.deletedAt) return true;
+
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: { email: getDeletedUserEmail(user.id), phone: null },
+    });
+    return false;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 }

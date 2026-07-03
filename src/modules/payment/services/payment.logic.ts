@@ -137,7 +137,11 @@ export class PaymentService {
 
   private serializeBooking(
     booking: PaymentWithBooking['booking']
-  ): PaymentBookingSummaryResponseDto {
+  ): PaymentBookingSummaryResponseDto | null {
+    if (!booking) {
+      return null;
+    }
+
     return {
       id: booking.id,
       courtId: booking.courtId,

@@ -44,7 +44,9 @@ export function resolveCheckoutSessionBookingId(session: {
   return null;
 }
 
-export function mapCheckoutSession(session: any): BookingCheckoutSessionResponseDto {
+export function mapCheckoutSession(
+  session: any
+): BookingCheckoutSessionResponseDto {
   return {
     id: session.id,
     status: session.status,
@@ -60,6 +62,7 @@ export function mapCheckoutSession(session: any): BookingCheckoutSessionResponse
     reference: session.reference,
     paymentMethod: session.paymentMethod,
     phone: maskPhone(session.phone),
+    checkoutUrl: session.checkoutUrl,
     failureReason: session.failureReason,
     expiresAt: session.expiresAt,
     paidAt: session.paidAt,
