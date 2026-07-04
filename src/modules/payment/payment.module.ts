@@ -8,12 +8,14 @@ import { NotificationModule } from 'src/modules/notification/notification.module
 import { PaymentPublicController } from './controllers/payment.public.controller';
 import { PaymentProviderFactory } from './providers/payment.provider.factory';
 import { PaysuiteProvider } from './providers/paysuite/paysuite.provider';
+import { ZenofyProvider } from './providers/zenofy/zenofy.provider';
 import { PaymentProcessor } from './queues/payment.processor';
 import { PAYMENT_QUEUE, PaymentQueue } from './queues/payment.queue';
 import { BookingCheckoutFinalizerService } from './services/booking-checkout-finalizer.service';
 import { PaymentService } from './services/payment.service';
 import { PaymentTransactionStateService } from './services/payment-transaction-state.service';
 import { PaysuiteWebhookService } from './services/paysuite-webhook.service';
+import { ZenofyWebhookService } from './services/zenofy-webhook.service';
 
 @Module({
   imports: [
@@ -26,7 +28,9 @@ import { PaysuiteWebhookService } from './services/paysuite-webhook.service';
   providers: [
     PaymentService,
     PaysuiteProvider,
+    ZenofyProvider,
     PaysuiteWebhookService,
+    ZenofyWebhookService,
     PaymentProviderFactory,
     PaymentQueue,
     PaymentProcessor,

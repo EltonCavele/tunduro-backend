@@ -9,9 +9,9 @@ import {
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { IAuthUser } from 'src/common/request/interfaces/request.interface';
 import {
-  extractPaysuitePaymentId,
-  mergePaysuiteMetadata,
-} from 'src/modules/payment/helpers/paysuite-payment.helper';
+  extractProviderPaymentId,
+  mergeProviderPaymentMetadata,
+} from 'src/modules/payment/helpers/zenofy-payment.helper';
 import { PaymentProviderFactory } from 'src/modules/payment/providers/payment.provider.factory';
 import { BookingCheckoutFinalizerService } from 'src/modules/payment/services/booking-checkout-finalizer.service';
 import { PaymentTransactionStateService } from 'src/modules/payment/services/payment-transaction-state.service';
@@ -60,7 +60,10 @@ export class BookingCheckoutRefreshService {
 
     const method = session.paymentMethod ?? PaymentMethod.MPESA;
     const provider = this.providerFactory.getProvider(method);
-    const providerPaymentId = extractPaysuitePaymentId(session.metadata);
+    const providerPaymentId = extractProviderPaymentId(
+      session.metadata,
+      method
+    );
     if (!provider.getStatus || !providerPaymentId) {
       return mapCheckoutSession(session);
     }
@@ -75,8 +78,12 @@ export class BookingCheckoutRefreshService {
         where: { id: session.id },
         data: {
           checkoutUrl: result.checkoutUrl ?? session.checkoutUrl,
-          metadata: mergePaysuiteMetadata(session.metadata, {
+          metadata: mergeProviderPaymentMetadata(session.metadata, method, {
             checkoutUrl: result.checkoutUrl ?? session.checkoutUrl ?? undefined,
+            orderId:
+              method === PaymentMethod.CARD
+                ? (result.providerPaymentId ?? providerPaymentId)
+                : undefined,
             paymentId: result.providerPaymentId ?? providerPaymentId,
             status: result.providerStatusCode,
             transactionId: result.providerTransactionId,
@@ -101,6 +108,7 @@ export class BookingCheckoutRefreshService {
         'expired',
         'payment.failed',
         'rejected',
+        'refunded',
       ].includes(remoteStatus);
       if (!isPaymentFailure) {
         throw new HttpException(
@@ -111,15 +119,31 @@ export class BookingCheckoutRefreshService {
 
       await this.failSession(
         session,
-        result.providerMessage,
-        result.providerStatusCode
-      );
-      await this.paymentTransactions.markCheckoutFailed(
-        session,
         method,
         result.providerMessage,
         result.providerStatusCode
       );
+      const isCancellation = [
+        'cancelled',
+        'canceled',
+        'expired',
+        'refunded',
+      ].includes(remoteStatus);
+      if (isCancellation) {
+        await this.paymentTransactions.markCheckoutCancelled(
+          session,
+          method,
+          result.providerMessage,
+          result.providerStatusCode
+        );
+      } else {
+        await this.paymentTransactions.markCheckoutFailed(
+          session,
+          method,
+          result.providerMessage,
+          result.providerStatusCode
+        );
+      }
       return this.findAndMap(session.id);
     }
 
@@ -127,8 +151,12 @@ export class BookingCheckoutRefreshService {
       where: { id: session.id },
       data: {
         checkoutUrl: result.checkoutUrl ?? session.checkoutUrl,
-        metadata: mergePaysuiteMetadata(session.metadata, {
+        metadata: mergeProviderPaymentMetadata(session.metadata, method, {
           checkoutUrl: result.checkoutUrl ?? session.checkoutUrl ?? undefined,
+          orderId:
+            method === PaymentMethod.CARD
+              ? (result.providerPaymentId ?? providerPaymentId)
+              : undefined,
           paymentId: result.providerPaymentId ?? providerPaymentId,
           status: result.providerStatusCode,
         }),
@@ -145,6 +173,7 @@ export class BookingCheckoutRefreshService {
 
   private async failSession(
     session: BookingCheckoutSession,
+    method: PaymentMethod,
     providerMessage: string,
     providerStatusCode: string
   ): Promise<void> {
@@ -156,8 +185,12 @@ export class BookingCheckoutRefreshService {
       },
       data: {
         failureReason,
-        metadata: mergePaysuiteMetadata(session.metadata, {
-          paymentId: extractPaysuitePaymentId(session.metadata) ?? undefined,
+        metadata: mergeProviderPaymentMetadata(session.metadata, method, {
+          orderId:
+            method === PaymentMethod.CARD
+              ? (extractProviderPaymentId(session.metadata, method) ?? undefined)
+              : undefined,
+          paymentId: extractProviderPaymentId(session.metadata, method) ?? undefined,
           status: providerStatusCode,
         }),
         status: BookingCheckoutSessionStatus.PAYMENT_FAILED,

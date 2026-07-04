@@ -14,6 +14,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PaymentMethod } from '@prisma/client';
 import { Request, Response } from 'express';
 
 import { DocPaginatedResponse } from 'src/common/doc/decorators/doc.paginated.decorator';
@@ -29,6 +30,7 @@ import { PaymentResponseDto } from '../dtos/response/payment.response';
 import { extractAppReturnUrl } from '../helpers/paysuite-payment.helper';
 import { PaymentService } from '../services/payment.service';
 import { PaysuiteWebhookService } from '../services/paysuite-webhook.service';
+import { ZenofyWebhookService } from '../services/zenofy-webhook.service';
 
 @ApiTags('public.payments')
 @Controller({
@@ -41,7 +43,8 @@ export class PaymentPublicController {
   constructor(
     private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
-    private readonly paysuiteWebhookService: PaysuiteWebhookService
+    private readonly paysuiteWebhookService: PaysuiteWebhookService,
+    private readonly zenofyWebhookService: ZenofyWebhookService
   ) {}
 
   @Get()
@@ -159,6 +162,99 @@ export class PaymentPublicController {
     }
 
     await this.paysuiteWebhookService.handleWebhook(payload);
+    return { received: true };
+  }
+
+  @Get('zenofy/return')
+  @PublicRoute()
+  @ApiOperation({ summary: 'Return from Zenofy checkout to mobile app' })
+  async handleZenofyReturn(
+    @Query('orderId') orderId: string | undefined,
+    @Res() response: Response
+  ): Promise<void> {
+    const transaction = orderId
+      ? await this.db.paymentTransaction.findFirst({
+          where: {
+            checkoutSessionId: { not: null },
+            method: PaymentMethod.CARD,
+            providerTransactionId: orderId,
+          },
+          select: {
+            checkoutSession: { select: { metadata: true } },
+            checkoutSessionId: true,
+          },
+        })
+      : null;
+    const session = !transaction && orderId
+      ? await this.db.bookingCheckoutSession.findFirst({
+          where: {
+            metadata: { path: ['zenofy', 'paymentId'], equals: orderId },
+            paymentMethod: PaymentMethod.CARD,
+          },
+          select: { id: true, metadata: true },
+        })
+      : null;
+    const sessionId = transaction?.checkoutSessionId ?? session?.id ?? '';
+    let deepLink = `myexpoapp://payments/booking-return?sessionId=${encodeURIComponent(
+      sessionId
+    )}`;
+    const appReturnUrl = extractAppReturnUrl(
+      transaction?.checkoutSession?.metadata ?? session?.metadata
+    );
+
+    if (appReturnUrl) {
+      try {
+        const url = new URL(appReturnUrl);
+        if (['exp:', 'exps:', 'myexpoapp:'].includes(url.protocol)) {
+          url.searchParams.set('sessionId', sessionId);
+          if (orderId) {
+            url.searchParams.set('orderId', orderId);
+          }
+          deepLink = url.toString();
+        } else {
+          this.logger.warn(
+            `Zenofy return ignored unsupported app return protocol: ${url.protocol}`
+          );
+        }
+      } catch {
+        this.logger.warn('Zenofy return ignored invalid app return URL');
+      }
+    }
+
+    const escapedDeepLink = deepLink.replace(/"/g, '&quot;');
+
+    response
+      .status(HttpStatus.OK)
+      .type('html')
+      .send(`<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Voltar ao Tunduro</title>
+  </head>
+  <body style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;">
+    <p>A voltar ao aplicativo...</p>
+    <p><a href="${escapedDeepLink}">Abrir aplicativo</a></p>
+    <script>window.location.href = "${escapedDeepLink}";</script>
+  </body>
+</html>`);
+  }
+
+  @Post('zenofy/webhook')
+  @PublicRoute()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Receive Zenofy order webhooks' })
+  async handleZenofyWebhook(
+    @Headers('x-webhook-secret') secret: string | string[] | undefined,
+    @Body() payload: unknown
+  ): Promise<{ received: true }> {
+    if (!this.zenofyWebhookService.verifySecret(secret)) {
+      this.logger.warn('Zenofy webhook rejected: invalid secret');
+      throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
+    }
+
+    await this.zenofyWebhookService.handleWebhook(payload);
     return { received: true };
   }
 }

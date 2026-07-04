@@ -394,7 +394,7 @@ export class BookingCheckoutFinalizerService {
 
     const usersByEmail = inviteEmails.length
       ? await tx.user.findMany({
-          where: { email: { in: inviteEmails } },
+          where: { email: { in: inviteEmails }, deletedAt: null },
           select: { id: true, email: true },
         })
       : [];

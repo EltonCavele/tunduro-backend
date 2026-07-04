@@ -51,6 +51,7 @@
     "organizerOverlap": "O organizador tem outra reserva no mesmo intervalo de horário",
     "participantOverlap": "O participante tem outra reserva no mesmo intervalo de horário",
     "exceedsCourtCapacity": "Esta reserva excede a capacidade de participantes do campo",
+    "inviteContactRequired": "Só podes convidar pessoas da tua lista de contactos",
     "invalidStatusForCancellation": "A reserva não pode ser cancelada no status atual",
     "invalidStatusForReschedule": "A reserva não pode ser reagendada no status atual",
     "rescheduleTooLate": "O reagendamento não é mais permitido",

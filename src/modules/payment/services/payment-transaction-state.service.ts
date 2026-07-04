@@ -11,7 +11,7 @@ import {
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { BOOKING_EXTENSION_INTENT } from 'src/modules/booking/constants/booking-extension.constants';
 
-import { mergePaysuiteMetadata } from '../helpers/paysuite-payment.helper';
+import { mergeProviderPaymentMetadata } from '../helpers/zenofy-payment.helper';
 import { ChargeResult } from '../providers/payment.provider.interface';
 
 @Injectable()
@@ -23,8 +23,12 @@ export class PaymentTransactionStateService {
     method: PaymentMethod,
     result: ChargeResult
   ): Promise<void> {
-    const metadata = mergePaysuiteMetadata(session.metadata, {
+    const metadata = mergeProviderPaymentMetadata(session.metadata, method, {
       checkoutUrl: result.checkoutUrl,
+      orderId:
+        method === PaymentMethod.CARD
+          ? (result.providerPaymentId ?? result.providerTransactionId)
+          : undefined,
       paymentId: result.providerPaymentId ?? result.providerTransactionId,
       status: result.providerStatusCode,
       transactionId: result.providerTransactionId,
@@ -232,7 +236,7 @@ export class PaymentTransactionStateService {
     method: PaymentMethod,
     result: ChargeResult
   ): Promise<void> {
-    const metadata = mergePaysuiteMetadata(session.metadata, {
+    const metadata = mergeProviderPaymentMetadata(session.metadata, method, {
       checkoutUrl: result.checkoutUrl,
       paymentId: result.providerPaymentId ?? result.providerTransactionId,
       status: result.providerStatusCode,

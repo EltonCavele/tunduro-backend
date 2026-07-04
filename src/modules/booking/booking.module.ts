@@ -12,6 +12,7 @@ import { BookingAdminController } from './controllers/booking.admin.controller';
 import { BookingAvailabilityService } from './services/booking-availability.service';
 import { BookingCheckoutRefreshService } from './services/booking-checkout-refresh.service';
 import { BookingCheckoutService } from './services/booking-checkout.service';
+import { BookingInviteContactService } from './services/booking-invite-contact.service';
 import { BookingInvitationService } from './services/booking-invitation.service';
 import { BookingService } from './services/booking.service';
 
@@ -30,6 +31,7 @@ import { BookingService } from './services/booking.service';
     BookingAvailabilityService,
     BookingCheckoutService,
     BookingCheckoutRefreshService,
+    BookingInviteContactService,
     BookingInvitationService,
   ],
   exports: [BookingService],

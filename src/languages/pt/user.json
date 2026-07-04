@@ -5,6 +5,10 @@
     "deleted": "Usuário excluído com sucesso",
     "updated": "Usuário atualizado com sucesso",
     "userDeleted": "Usuário excluído com sucesso",
+    "contacts": "Contactos recuperados com sucesso",
+    "contactCreated": "Contacto criado com sucesso",
+    "contactInvited": "Convite enviado com sucesso",
+    "contactDeleted": "Contacto apagado com sucesso",
     "notificationPreferences": "Preferências de notificação recuperadas com sucesso",
     "notificationPreferencesUpdated": "Preferências de notificação atualizadas com sucesso"
   },
@@ -12,6 +16,8 @@
     "notFound": "Usuário não encontrado no banco de dados",
     "userNotFound": "Usuário não encontrado no banco de dados",
     "exists": "Já existe um usuário com o email/nome de usuário informado",
-    "userExists": "Já existe um usuário com o email/nome de usuário informado"
+    "userExists": "Já existe um usuário com o email/nome de usuário informado",
+    "contactNotFound": "Contacto não encontrado",
+    "contactSelfNotAllowed": "Não podes adicionar o teu próprio e-mail aos contactos"
   }
 }

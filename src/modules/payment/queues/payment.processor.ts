@@ -6,7 +6,7 @@ import { Job } from 'bull';
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { BookingNotifierService } from 'src/modules/notification/services/booking.notifier.service';
 
-import { mergePaysuiteMetadata } from '../helpers/paysuite-payment.helper';
+import { mergeProviderPaymentMetadata } from '../helpers/zenofy-payment.helper';
 import { PaymentProviderFactory } from '../providers/payment.provider.factory';
 import { ChargeResult } from '../providers/payment.provider.interface';
 import { BookingCheckoutFinalizerService } from '../services/booking-checkout-finalizer.service';
@@ -35,6 +35,16 @@ export class PaymentProcessor {
 
     const session = await this.db.bookingCheckoutSession.findUnique({
       where: { id: sessionId },
+      include: {
+        organizer: {
+          select: {
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+      },
     });
 
     if (!session) {
@@ -51,12 +61,20 @@ export class PaymentProcessor {
 
     const method = session.paymentMethod ?? PaymentMethod.MPESA;
     const provider = this.providerFactory.getProvider(method);
+    const customerName = `${session.organizer.firstName ?? ''} ${
+      session.organizer.lastName ?? ''
+    }`.trim();
     const result = await provider.charge({
       amount: Number(session.amount),
       currency: session.currency,
+      customerEmail: session.organizer.email,
+      customerName,
       description: `Reserva Tunduro ${session.reference}`,
       method,
-      phone: session.phone ?? undefined,
+      phone:
+        method === PaymentMethod.CARD
+          ? (session.phone ?? session.organizer.phone ?? undefined)
+          : (session.phone ?? undefined),
       reference: session.reference,
       sessionId: session.id,
       thirdPartyRef: session.id.replace(/-/g, '').slice(0, 20),
@@ -67,8 +85,12 @@ export class PaymentProcessor {
         where: { id: session.id },
         data: {
           checkoutUrl: result.checkoutUrl ?? null,
-          metadata: mergePaysuiteMetadata(session.metadata, {
+          metadata: mergeProviderPaymentMetadata(session.metadata, method, {
             checkoutUrl: result.checkoutUrl,
+            orderId:
+              method === PaymentMethod.CARD
+                ? (result.providerPaymentId ?? result.providerTransactionId)
+                : undefined,
             paymentId: result.providerPaymentId ?? result.providerTransactionId,
             status: result.providerStatusCode,
             transactionId: result.providerTransactionId,
@@ -94,8 +116,12 @@ export class PaymentProcessor {
         where: { id: session.id },
         data: {
           checkoutUrl: result.checkoutUrl ?? null,
-          metadata: mergePaysuiteMetadata(session.metadata, {
+          metadata: mergeProviderPaymentMetadata(session.metadata, method, {
             checkoutUrl: result.checkoutUrl,
+            orderId:
+              method === PaymentMethod.CARD
+                ? (result.providerPaymentId ?? result.providerTransactionId)
+                : undefined,
             paymentId: result.providerPaymentId ?? result.providerTransactionId,
             status: result.providerStatusCode,
           }),

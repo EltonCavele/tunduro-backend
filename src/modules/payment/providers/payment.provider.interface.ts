@@ -3,6 +3,8 @@ import { PaymentMethod } from '@prisma/client';
 export interface ChargeInput {
   amount: number;
   currency: string;
+  customerEmail?: string;
+  customerName?: string;
   description?: string;
   method: PaymentMethod;
   phone?: string;

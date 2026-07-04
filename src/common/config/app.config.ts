@@ -20,6 +20,9 @@ export default registerAs('app', (): Record<string, any> => {
     env: process.env.APP_ENV ?? APP_ENVIRONMENT.LOCAL,
     name: process.env.APP_NAME ?? 'payment-platform',
     frontendUrl: process.env.APP_FRONTEND_URL ?? process.env.FRONTEND_URL,
+    downloadIosUrl: process.env.APP_DOWNLOAD_IOS_URL,
+    downloadAndroidUrl: process.env.APP_DOWNLOAD_ANDROID_URL,
+    downloadFallbackUrl: process.env.APP_DOWNLOAD_FALLBACK_URL,
 
     versioning: {
       enable: process.env.HTTP_VERSIONING_ENABLE === 'true',

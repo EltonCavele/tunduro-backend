@@ -6,6 +6,12 @@ import {
   User,
 } from '@prisma/client';
 
+import {
+  invitationDownloadHtml,
+  invitationDownloadText,
+  type InvitationDownloadLinks,
+} from '../helpers/invitation-download.helper';
+
 export interface BookingNotificationContext {
   booking: Pick<
     Booking,
@@ -46,6 +52,7 @@ export interface InvitationNotificationContext {
   >;
   appName: string;
   frontendUrl?: string;
+  downloadLinks?: InvitationDownloadLinks;
 }
 
 export interface BookingNotificationContent {
@@ -451,15 +458,13 @@ export function checkoutExpiredTemplate(
   };
 }
 
-function inviterDisplay(ctx: InvitationNotificationContext): string {
-  return ctx.inviter.firstName?.trim() || ctx.inviter.email;
-}
+const inviterDisplay = (ctx: InvitationNotificationContext): string =>
+  ctx.inviter.firstName?.trim() || ctx.inviter.email;
 
-function invitationLink(ctx: InvitationNotificationContext): string | null {
-  if (!ctx.frontendUrl) return null;
-  const base = ctx.frontendUrl.replace(/\/+$/, '');
-  return `${base}/invite/${ctx.invitation.token}`;
-}
+const invitationLink = (ctx: InvitationNotificationContext): string | null =>
+  ctx.frontendUrl
+    ? `${ctx.frontendUrl.replace(/\/+$/, '')}/invite/${ctx.invitation.token}`
+    : null;
 
 function invitationDetailsHtml(ctx: InvitationNotificationContext): string {
   const { booking, court } = ctx;
@@ -504,6 +509,7 @@ function wrapInvitationEmail(
       <h2 style="margin: 0 0 12px 0;">${title}</h2>
       ${body}
       ${cta}
+      ${invitationDownloadHtml(ctx.downloadLinks)}
       <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
       <p style="color: #666; font-size: 12px; margin: 0;">${ctx.appName}</p>
     </div>
@@ -521,6 +527,7 @@ export function invitationCreatedTemplate(
   )}. Confirma a tua presença na app.`;
   const link = invitationLink(ctx);
   const linkLine = link ? `\n\nResponde aqui: ${link}` : '';
+  const downloadLine = invitationDownloadText(ctx.downloadLinks);
 
   return {
     pushTitle: 'Foste convidado para uma partida',
@@ -534,7 +541,7 @@ export function invitationCreatedTemplate(
       `<p>${greeting}</p><p>${intro}</p>${invitationDetailsHtml(ctx)}`,
       ctx
     ),
-    emailText: `${greeting}\n\n${intro}\n\n${invitationDetailsText(ctx)}${linkLine}`,
+    emailText: `${greeting}\n\n${intro}\n\n${invitationDetailsText(ctx)}${linkLine}${downloadLine}`,
   };
 }
 

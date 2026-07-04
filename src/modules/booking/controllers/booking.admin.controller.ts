@@ -67,7 +67,7 @@ export class BookingAdminController {
   @ApiBearerAuth('accessToken')
   @ApiOperation({
     summary:
-      'Iniciar checkout para utilizador (admin): cria BookingCheckoutSession OPEN e prepara pagamento PaySuite em background',
+      'Iniciar checkout para utilizador (admin): cria BookingCheckoutSession OPEN e prepara pagamento em background',
     description:
       'Não cria Booking. Use GET /admin/booking/checkout/:sessionId para fazer polling. Quando status === COMPLETED, bookingId é populado.',
   })

@@ -37,7 +37,7 @@ export class BookingAdminCreateRequestDto {
 
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Opcional; PaySuite recolhe o numero no checkout',
+    description: 'Opcional; o gateway recolhe o numero quando aplicavel',
   })
   @IsOptional()
   @IsString()
@@ -45,7 +45,7 @@ export class BookingAdminCreateRequestDto {
 
   @ApiPropertyOptional({
     example: 'exp://192.168.1.10:8081/--/payments/booking-return',
-    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+    description: 'Deep link gerado pelo app para voltar apos o pagamento',
   })
   @IsOptional()
   @IsString()
@@ -55,7 +55,7 @@ export class BookingAdminCreateRequestDto {
   @ApiPropertyOptional({
     enum: PaymentMethod,
     example: PaymentMethod.MPESA,
-    description: 'Método de pagamento; só MPESA é suportado de momento',
+    description: 'Metodo de pagamento da reserva',
   })
   @IsOptional()
   @IsEnum(PaymentMethod)
@@ -103,7 +103,7 @@ export class BookingCreateRequestDto {
 
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Opcional; PaySuite recolhe o numero no checkout',
+    description: 'Opcional; o gateway recolhe o numero quando aplicavel',
   })
   @IsOptional()
   @IsString()
@@ -111,7 +111,7 @@ export class BookingCreateRequestDto {
 
   @ApiPropertyOptional({
     example: 'exp://192.168.1.10:8081/--/payments/booking-return',
-    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+    description: 'Deep link gerado pelo app para voltar apos o pagamento',
   })
   @IsOptional()
   @IsString()
@@ -121,7 +121,7 @@ export class BookingCreateRequestDto {
   @ApiPropertyOptional({
     enum: PaymentMethod,
     example: PaymentMethod.MPESA,
-    description: 'Método de pagamento; só MPESA é suportado de momento',
+    description: 'Metodo de pagamento da reserva',
   })
   @IsOptional()
   @IsEnum(PaymentMethod)
@@ -244,7 +244,7 @@ export class BookingInvitationRespondDto {
 export class BookingExtendRequestDto {
   @ApiPropertyOptional({
     example: '258841234567',
-    description: 'Opcional; PaySuite recolhe o numero no checkout',
+    description: 'Opcional; o gateway recolhe o numero quando aplicavel',
   })
   @IsOptional()
   @IsString()
@@ -252,7 +252,7 @@ export class BookingExtendRequestDto {
 
   @ApiPropertyOptional({
     example: 'exp://192.168.1.10:8081/--/payments/booking-return',
-    description: 'Deep link gerado pelo app para voltar apos o PaySuite',
+    description: 'Deep link gerado pelo app para voltar apos o pagamento',
   })
   @IsOptional()
   @IsString()
@@ -262,7 +262,7 @@ export class BookingExtendRequestDto {
   @ApiPropertyOptional({
     enum: PaymentMethod,
     example: PaymentMethod.MPESA,
-    description: 'Método de pagamento; só MPESA é suportado de momento',
+    description: 'Metodo de pagamento da reserva',
   })
   @IsOptional()
   @IsEnum(PaymentMethod)

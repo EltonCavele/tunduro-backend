@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpStatus,
+  Param,
   Post,
   Put,
   Query,
@@ -20,9 +21,15 @@ import { ApiPaginatedDataDto } from 'src/common/response/dtos/response.paginated
 import { ApiGenericResponseDto } from 'src/common/response/dtos/response.generic.dto';
 
 import { UserChangePasswordDto } from '../dtos/request/user.change-password.request';
+import {
+  UserContactCreateDto,
+  UserContactInviteDto,
+  UserContactListQueryDto,
+} from '../dtos/request/user.contact.request';
 import { UserDeleteAccountDto } from '../dtos/request/user.delete-account.request';
 import { UserNotificationPreferencesUpdateDto } from '../dtos/request/user.notification-preferences.update.request';
 import { UserUpdateDto } from '../dtos/request/user.update.request';
+import { UserContactResponseDto } from '../dtos/response/user.contact.response';
 import {
   UserExpoPushTokenResponseDto,
   UserGetProfileResponseDto,
@@ -30,6 +37,7 @@ import {
   UserUpdateProfileResponseDto,
 } from '../dtos/response/user.response';
 import { UserExpoPushTokenUpdateDto } from '../dtos/request/user.expo-push-token.update.request';
+import { UserContactService } from '../services/user-contact.service';
 import { UserService } from '../services/user.service';
 
 @ApiTags('public.user')
@@ -38,7 +46,69 @@ import { UserService } from '../services/user.service';
   version: '1',
 })
 export class UserPublicController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly userContactService: UserContactService
+  ) {}
+
+  @Get('contacts')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Get logged-in user contacts' })
+  @DocPaginatedResponse({
+    serialization: UserContactResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.contacts',
+  })
+  public async listContacts(
+    @AuthUser() user: IAuthUser,
+    @Query() query: UserContactListQueryDto
+  ): Promise<ApiPaginatedDataDto<UserContactResponseDto>> {
+    return this.userContactService.listContacts(user.userId, query);
+  }
+
+  @Post('contacts')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Create logged-in user contact' })
+  @DocResponse({
+    serialization: UserContactResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'user.success.contactCreated',
+  })
+  public async createContact(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: UserContactCreateDto
+  ): Promise<UserContactResponseDto> {
+    return this.userContactService.createContact(user.userId, payload);
+  }
+
+  @Post('contacts/invite')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Invite a friend by email' })
+  @DocResponse({
+    serialization: UserContactResponseDto,
+    httpStatus: HttpStatus.CREATED,
+    messageKey: 'user.success.contactInvited',
+  })
+  public async inviteContact(
+    @AuthUser() user: IAuthUser,
+    @Body() payload: UserContactInviteDto
+  ): Promise<UserContactResponseDto> {
+    return this.userContactService.inviteContact(user.userId, payload);
+  }
+
+  @Delete('contacts/:id')
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Delete logged-in user contact' })
+  @DocGenericResponse({
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.contactDeleted',
+  })
+  public async deleteContact(
+    @AuthUser() user: IAuthUser,
+    @Param('id') contactId: string
+  ): Promise<ApiGenericResponseDto> {
+    return this.userContactService.deleteContact(user.userId, contactId);
+  }
 
   @Get('all')
   @ApiBearerAuth('accessToken')

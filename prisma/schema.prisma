@@ -167,8 +167,26 @@ model User {
   walletTransactions      WalletTransaction[]      @relation("WalletOwner")
   walletAdminTransactions WalletTransaction[]      @relation("WalletCreatedBy")
   walletTopUpSessions     WalletTopUpSession[]
+  ownedContacts           UserContact[]            @relation("UserOwnedContacts")
 
   @@map("users")
+}
+
+model UserContact {
+  id          String    @id @default(uuid())
+  ownerUserId String
+  displayName String?
+  email       String
+  phone       String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner User @relation("UserOwnedContacts", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, email])
+  @@index([ownerUserId, deletedAt])
+  @@map("user_contacts")
 }
 
 model UserOtp {

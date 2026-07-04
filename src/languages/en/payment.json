@@ -8,6 +8,8 @@
   "error": {
     "notFound": "Transação de pagamento não encontrada",
     "alreadyConfirmed": "O pagamento já foi confirmado",
+    "cardPhoneRequired": "Atualize o telefone no perfil para pagar com cartão",
+    "invalidCustomer": "Dados do cliente inválidos para pagamento com cartão",
     "invalidMethod": "Método de pagamento inválido",
     "invalidReference": "Invalid payment reference",
     "invalidPhone": "Número de telemóvel moçambicano inválido",

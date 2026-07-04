@@ -416,6 +416,13 @@ export class BookingNotifierService {
 
     const appName = this.configService.get<string>('app.name') ?? 'Tunduro';
     const frontendUrl = this.configService.get<string>('app.frontendUrl');
+    const downloadIosUrl = this.configService.get<string>('app.downloadIosUrl');
+    const downloadAndroidUrl = this.configService.get<string>(
+      'app.downloadAndroidUrl'
+    );
+    const downloadFallbackUrl = this.configService.get<string>(
+      'app.downloadFallbackUrl'
+    );
 
     const inviter: RecipientSummary = {
       ...invitation.inviterUser,
@@ -454,6 +461,14 @@ export class BookingNotifierService {
         },
         appName,
         frontendUrl: frontendUrl || undefined,
+        downloadLinks:
+          invitation.inviteeEmail && !invitation.invitedUserId
+            ? {
+                ios: downloadIosUrl || undefined,
+                android: downloadAndroidUrl || undefined,
+                fallback: downloadFallbackUrl || undefined,
+              }
+            : undefined,
       },
       inviter,
       invitedUser,

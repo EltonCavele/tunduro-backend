@@ -15,6 +15,7 @@ import { CourtService } from 'src/modules/court/services/court.service';
 import { PaymentQueue } from 'src/modules/payment/queues/payment.queue';
 import { mergeAppReturnUrlMetadata } from 'src/modules/payment/helpers/paysuite-payment.helper';
 import { normalizePaysuiteReference } from 'src/modules/payment/helpers/payment-reference.helper';
+import { normalizeZenofyPhoneNumber } from 'src/modules/payment/helpers/zenofy-payment.helper';
 import { BookingCheckoutFinalizerService } from 'src/modules/payment/services/booking-checkout-finalizer.service';
 import { WalletService } from 'src/modules/wallet/services/wallet.service';
 
@@ -40,6 +41,7 @@ import {
 } from '../helpers/booking-extension.helper';
 import { mapCheckoutSession } from '../helpers/booking-mapper.helper';
 import { BookingAvailabilityService } from './booking-availability.service';
+import { BookingInviteContactService } from './booking-invite-contact.service';
 
 const DEFAULT_PAYMENT_DEADLINE_MIN = 30;
 
@@ -54,7 +56,8 @@ export class BookingCheckoutService {
     private readonly checkoutFinalizer: BookingCheckoutFinalizerService,
     private readonly walletService: WalletService,
     private readonly configService: ConfigService,
-    private readonly bookingAvailabilityService: BookingAvailabilityService
+    private readonly bookingAvailabilityService: BookingAvailabilityService,
+    private readonly bookingInviteContactService: BookingInviteContactService
   ) {}
 
   async startCheckout(args: {
@@ -66,15 +69,23 @@ export class BookingCheckoutService {
     const method = dto.paymentMethod ?? PaymentMethod.MPESA;
     this.assertSupportedCheckoutMethod(method);
 
-    const phone = dto.phone?.trim() || null;
-
     const court = await this.courtService.assertCourtIsBookable(dto.courtId);
     const organizer = await this.db.user.findUnique({
       where: { id: organizerId },
-      select: { role: true },
+      select: { phone: true, role: true },
     });
     if (!organizer) {
       throw new HttpException('user.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+    const phone =
+      method === PaymentMethod.CARD
+        ? normalizeZenofyPhoneNumber(organizer.phone)
+        : dto.phone?.trim() || null;
+    if (method === PaymentMethod.CARD && !phone) {
+      throw new HttpException(
+        'payment.error.cardPhoneRequired',
+        HttpStatus.BAD_REQUEST
+      );
     }
 
     const lightingRequested = dto.lightingRequested ?? false;
@@ -93,9 +104,22 @@ export class BookingCheckoutService {
       throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
     }
 
+    const skipContactValidation = Boolean(
+      metadata &&
+        typeof metadata === 'object' &&
+        !Array.isArray(metadata) &&
+        (metadata as Record<string, unknown>).createdByAdmin === true
+    );
+    const preparedInvites =
+      await this.bookingInviteContactService.prepareCheckoutInvites({
+        organizerId,
+        participantUserIds: dto.participantUserIds,
+        inviteEmails: dto.inviteEmails,
+        skipContactValidation,
+      });
     const participantCount =
-      (dto.participantUserIds?.length ?? 0) +
-      (dto.inviteEmails?.length ?? 0) +
+      preparedInvites.participantUserIds.length +
+      preparedInvites.inviteEmails.length +
       1;
     if (court.maxPlayers && participantCount > court.maxPlayers) {
       throw new HttpException(
@@ -134,11 +158,11 @@ export class BookingCheckoutService {
         expiresAt,
         paymentMethod: method,
         phone,
-        participantUserIds: dto.participantUserIds
-          ? (dto.participantUserIds as Prisma.InputJsonValue)
+        participantUserIds: preparedInvites.participantUserIds.length
+          ? (preparedInvites.participantUserIds as Prisma.InputJsonValue)
           : Prisma.JsonNull,
-        inviteEmails: dto.inviteEmails
-          ? (dto.inviteEmails as Prisma.InputJsonValue)
+        inviteEmails: preparedInvites.inviteEmails.length
+          ? (preparedInvites.inviteEmails as Prisma.InputJsonValue)
           : Prisma.JsonNull,
         metadata: mergeAppReturnUrlMetadata(metadata, dto.returnUrl),
       },
@@ -170,7 +194,23 @@ export class BookingCheckoutService {
     const method = dto.paymentMethod ?? PaymentMethod.MPESA;
     this.assertSupportedCheckoutMethod(method);
 
-    const phone = dto.phone?.trim() || null;
+    const payer =
+      method === PaymentMethod.CARD
+        ? await this.db.user.findUnique({
+            where: { id: user.userId },
+            select: { phone: true },
+          })
+        : null;
+    const phone =
+      method === PaymentMethod.CARD
+        ? normalizeZenofyPhoneNumber(payer?.phone)
+        : dto.phone?.trim() || null;
+    if (method === PaymentMethod.CARD && !phone) {
+      throw new HttpException(
+        'payment.error.cardPhoneRequired',
+        HttpStatus.BAD_REQUEST
+      );
+    }
 
     const booking = await this.db.booking.findUnique({
       where: { id: bookingId },
@@ -380,7 +420,8 @@ export class BookingCheckoutService {
     if (
       method === PaymentMethod.MPESA ||
       method === PaymentMethod.CLUB_BALANCE ||
-      method === PaymentMethod.EMOLA
+      method === PaymentMethod.EMOLA ||
+      method === PaymentMethod.CARD
     ) {
       return;
     }

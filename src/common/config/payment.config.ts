@@ -17,5 +17,15 @@ export default registerAs(
         ? Number.parseInt(process.env.PAYSUITE_REQUEST_TIMEOUT_MS, 10)
         : 30000,
     },
+
+    zenofy: {
+      apiUrl: process.env.ZENOFY_API_URL ?? 'https://api.zenofy.io',
+      bookingProductId: process.env.ZENOFY_BOOKING_PRODUCT_ID ?? '',
+      checkoutApiKey: process.env.ZENOFY_CHECKOUT_API_KEY ?? '',
+      requestTimeoutMs: process.env.ZENOFY_REQUEST_TIMEOUT_MS
+        ? Number.parseInt(process.env.ZENOFY_REQUEST_TIMEOUT_MS, 10)
+        : 30000,
+      webhookSecret: process.env.ZENOFY_WEBHOOK_SECRET ?? '',
+    },
   })
 );
