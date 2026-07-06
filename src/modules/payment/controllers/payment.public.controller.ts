@@ -169,15 +169,19 @@ export class PaymentPublicController {
   @PublicRoute()
   @ApiOperation({ summary: 'Return from Zenofy checkout to mobile app' })
   async handleZenofyReturn(
+    @Query('checkout_id') checkoutId: string | undefined,
     @Query('orderId') orderId: string | undefined,
+    @Query('reference') reference: string | undefined,
+    @Query('sessionId') returnSessionId: string | undefined,
     @Res() response: Response
   ): Promise<void> {
-    const transaction = orderId
+    const providerId = checkoutId ?? orderId;
+    const transaction = providerId
       ? await this.db.paymentTransaction.findFirst({
           where: {
             checkoutSessionId: { not: null },
             method: PaymentMethod.CARD,
-            providerTransactionId: orderId,
+            providerTransactionId: providerId,
           },
           select: {
             checkoutSession: { select: { metadata: true } },
@@ -185,16 +189,22 @@ export class PaymentPublicController {
           },
         })
       : null;
-    const session = !transaction && orderId
+    const session = !transaction && providerId
       ? await this.db.bookingCheckoutSession.findFirst({
           where: {
-            metadata: { path: ['zenofy', 'paymentId'], equals: orderId },
+            metadata: { path: ['zenofy', 'paymentId'], equals: providerId },
             paymentMethod: PaymentMethod.CARD,
           },
           select: { id: true, metadata: true },
         })
-      : null;
-    const sessionId = transaction?.checkoutSessionId ?? session?.id ?? '';
+      : reference
+        ? await this.db.bookingCheckoutSession.findUnique({
+            where: { reference },
+            select: { id: true, metadata: true },
+          })
+        : null;
+    const sessionId =
+      transaction?.checkoutSessionId ?? session?.id ?? returnSessionId ?? '';
     let deepLink = `myexpoapp://payments/booking-return?sessionId=${encodeURIComponent(
       sessionId
     )}`;
@@ -207,8 +217,8 @@ export class PaymentPublicController {
         const url = new URL(appReturnUrl);
         if (['exp:', 'exps:', 'myexpoapp:'].includes(url.protocol)) {
           url.searchParams.set('sessionId', sessionId);
-          if (orderId) {
-            url.searchParams.set('orderId', orderId);
+          if (providerId) {
+            url.searchParams.set('checkout_id', providerId);
           }
           deepLink = url.toString();
         } else {
@@ -246,11 +256,13 @@ export class PaymentPublicController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive Zenofy order webhooks' })
   async handleZenofyWebhook(
-    @Headers('x-webhook-secret') secret: string | string[] | undefined,
+    @Req() request: Request & { rawBody?: Buffer },
+    @Headers('x-signature') signature: string | string[] | undefined,
     @Body() payload: unknown
   ): Promise<{ received: true }> {
-    if (!this.zenofyWebhookService.verifySecret(secret)) {
-      this.logger.warn('Zenofy webhook rejected: invalid secret');
+    const rawBody = request.rawBody ?? Buffer.from(JSON.stringify(payload));
+    if (!this.zenofyWebhookService.verifySignature(rawBody, signature)) {
+      this.logger.warn('Zenofy webhook rejected: invalid signature');
       throw new HttpException('auth.error.forbidden', HttpStatus.FORBIDDEN);
     }
 

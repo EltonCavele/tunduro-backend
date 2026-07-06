@@ -104,6 +104,7 @@ export class BookingCheckoutRefreshService {
         'failed',
         'cancelled',
         'canceled',
+        'chargeback',
         'declined',
         'expired',
         'payment.failed',
@@ -126,6 +127,7 @@ export class BookingCheckoutRefreshService {
       const isCancellation = [
         'cancelled',
         'canceled',
+        'chargeback',
         'expired',
         'refunded',
       ].includes(remoteStatus);

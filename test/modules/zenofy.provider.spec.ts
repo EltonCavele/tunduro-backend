@@ -29,10 +29,9 @@ describe('ZenofyProvider', () => {
   it('creates a pending card order in Zenofy', async () => {
     mockedAxios.post.mockResolvedValueOnce({
       data: {
-        orderId: 'order-1',
-        paymentPath: '/o/order-1',
-        paymentUrl: 'https://pay.zenofy.io/o/order-1',
-        success: true,
+        checkout_id: 'checkout-1',
+        checkout_url: 'https://pay.zenofy.io/c/checkout-1',
+        expires_at: '2026-05-20T14:30:00.0000000Z',
       },
     });
 
@@ -40,6 +39,7 @@ describe('ZenofyProvider', () => {
       'payment.zenofy.apiUrl': 'https://api.zenofy.test',
       'payment.zenofy.bookingProductId': 'product-1',
       'payment.zenofy.checkoutApiKey': 'api-key-1',
+      'payment.zenofy.publicBaseUrl': 'https://api.tunduro.test',
     });
 
     const result = await provider.charge({
@@ -50,16 +50,23 @@ describe('ZenofyProvider', () => {
       method: PaymentMethod.CARD,
       phone: '+258841234567',
       reference: 'TUNDUROABC123',
+      sessionId: 'session1',
       thirdPartyRef: 'session1',
     });
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
-      'https://api.zenofy.test/checkout/order-from-product',
+      'https://api.zenofy.test/checkout/order-api-gateway',
       expect.objectContaining({
-        customerName: 'Cliente Teste',
-        email: 'client@example.com',
-        phoneNumber: '+258841234567',
+        amount: 100000,
+        customer: {
+          email: 'client@example.com',
+          name: 'Cliente Teste',
+          phone: '+258841234567',
+        },
+        payment_methods: ['card'],
         productId: 'product-1',
+        success_url:
+          'https://api.tunduro.test/v1/payments/zenofy/return?sessionId=session1&reference=TUNDUROABC123',
       }),
       expect.objectContaining({
         headers: expect.objectContaining({ 'Api-Key': 'api-key-1' }),
@@ -67,9 +74,9 @@ describe('ZenofyProvider', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({
-        checkoutUrl: 'https://pay.zenofy.io/o/order-1',
-        providerPaymentId: 'order-1',
-        providerTransactionId: 'order-1',
+        checkoutUrl: 'https://pay.zenofy.io/c/checkout-1',
+        providerPaymentId: 'checkout-1',
+        providerTransactionId: 'checkout-1',
         status: 'PENDING',
         success: true,
       })

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -16,14 +16,15 @@ import { BookingCheckoutFinalizerService } from './booking-checkout-finalizer.se
 import { PaymentTransactionStateService } from './payment-transaction-state.service';
 
 interface ZenofyWebhookPayload {
+  amount?: number;
+  checkout_id?: string;
   currency?: string;
   event?: string;
-  orderId?: string;
-  paidAt?: string;
-  paymentGateway?: string;
-  paymentReference?: string | null;
+  paid_at?: string;
+  payment_id?: string;
+  payment_method?: string;
+  reference?: string;
   status?: string;
-  totalAmount?: number;
 }
 
 @Injectable()
@@ -38,19 +39,24 @@ export class ZenofyWebhookService {
     private readonly bookingNotifier: BookingNotifierService
   ) {}
 
-  verifySecret(secretHeader?: string | string[]): boolean {
+  verifySignature(
+    rawBody: Buffer | string,
+    signature?: string | string[]
+  ): boolean {
     const secret =
       this.configService.get<string>('payment.zenofy.webhookSecret')?.trim() ??
       '';
-    const received = Array.isArray(secretHeader)
-      ? secretHeader[0]
-      : secretHeader;
+    const received = Array.isArray(signature) ? signature[0] : signature;
     if (!secret || !received) {
       return false;
     }
 
-    const expectedBuffer = Buffer.from(secret);
-    const receivedBuffer = Buffer.from(received.trim());
+    const normalizedSignature = received.replace(/^sha256=/i, '').trim();
+    const calculated = createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+    const expectedBuffer = Buffer.from(calculated, 'hex');
+    const receivedBuffer = Buffer.from(normalizedSignature, 'hex');
     return (
       expectedBuffer.length === receivedBuffer.length &&
       timingSafeEqual(expectedBuffer, receivedBuffer)
@@ -59,24 +65,29 @@ export class ZenofyWebhookService {
 
   async handleWebhook(rawPayload: unknown): Promise<void> {
     const payload = rawPayload as ZenofyWebhookPayload;
-    const orderId = payload.orderId?.trim();
-    if (!orderId) {
-      this.logger.warn('Zenofy webhook ignored: missing orderId');
+    const checkoutId = payload.checkout_id?.trim();
+    const reference = payload.reference?.trim();
+    if (!checkoutId && !reference) {
+      this.logger.warn('Zenofy webhook ignored: missing checkout_id/reference');
       return;
     }
 
     this.logger.log(
-      `Zenofy webhook received: ${payload.event ?? 'unknown'} ${orderId}`
+      `Zenofy webhook received: ${payload.event ?? 'unknown'} ${
+        checkoutId || reference
+      }`
     );
 
-    const session = await this.findBookingSession(orderId);
+    const session = await this.findBookingSession(checkoutId, reference);
     if (!session) {
-      this.logger.warn(`Zenofy webhook ignored: order ${orderId} not found`);
+      this.logger.warn(
+        `Zenofy webhook ignored: checkout ${checkoutId || reference} not found`
+      );
       return;
     }
 
-    if (payload.event === 'order_paid' || payload.status === 'PAID') {
-      const result = this.successResult(payload, orderId);
+    if (payload.event === 'payment.succeeded' || payload.status === 'succeeded') {
+      const result = this.successResult(payload);
       const updated = await this.db.bookingCheckoutSession.update({
         where: { id: session.id },
         data: {
@@ -85,11 +96,11 @@ export class ZenofyWebhookService {
             PaymentMethod.CARD,
             {
               event: payload.event,
-              orderId,
-              paymentId: orderId,
-              paymentReference: payload.paymentReference,
-              status: payload.status ?? 'PAID',
-              transactionId: orderId,
+              orderId: checkoutId,
+              paymentId: checkoutId,
+              paymentReference: payload.payment_id,
+              status: payload.status ?? 'succeeded',
+              transactionId: payload.payment_id ?? checkoutId,
             }
           ),
         },
@@ -104,56 +115,65 @@ export class ZenofyWebhookService {
     }
 
     if (
-      payload.event === 'order_cancelled' ||
-      payload.event === 'order_refunded' ||
-      payload.status === 'CANCELLED' ||
-      payload.status === 'REFUNDED'
+      payload.event === 'payment.refunded' ||
+      payload.event === 'payment.chargeback' ||
+      payload.status === 'refunded' ||
+      payload.status === 'chargeback'
     ) {
       await this.cancelSession(
         session,
-        payload.status ?? payload.event ?? 'CANCELLED',
+        payload.status ?? payload.event ?? 'refunded',
         payload
       );
     }
   }
 
   private async findBookingSession(
-    orderId: string
+    checkoutId: string | undefined,
+    reference: string | undefined
   ): Promise<BookingCheckoutSession | null> {
-    const transaction = await this.db.paymentTransaction.findFirst({
-      where: {
-        method: PaymentMethod.CARD,
-        providerTransactionId: orderId,
-        checkoutSessionId: { not: null },
-      },
-      include: { checkoutSession: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (transaction?.checkoutSession) {
-      return transaction.checkoutSession;
+    if (checkoutId) {
+      const transaction = await this.db.paymentTransaction.findFirst({
+        where: {
+          method: PaymentMethod.CARD,
+          providerTransactionId: checkoutId,
+          checkoutSessionId: { not: null },
+        },
+        include: { checkoutSession: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (transaction?.checkoutSession) {
+        return transaction.checkoutSession;
+      }
+
+      const session = await this.db.bookingCheckoutSession.findFirst({
+        where: {
+          paymentMethod: PaymentMethod.CARD,
+          metadata: {
+            path: ['zenofy', 'paymentId'],
+            equals: checkoutId,
+          },
+        },
+      });
+      if (session) {
+        return session;
+      }
     }
 
-    return this.db.bookingCheckoutSession.findFirst({
-      where: {
-        paymentMethod: PaymentMethod.CARD,
-        metadata: {
-          path: ['zenofy', 'paymentId'],
-          equals: orderId,
-        },
-      },
-    });
+    return reference
+      ? this.db.bookingCheckoutSession.findUnique({ where: { reference } })
+      : null;
   }
 
-  private successResult(
-    payload: ZenofyWebhookPayload,
-    orderId: string
-  ): ChargeResult {
+  private successResult(payload: ZenofyWebhookPayload): ChargeResult {
+    const checkoutId = payload.checkout_id;
+    const paymentId = payload.payment_id ?? checkoutId;
     return {
-      providerPaymentId: orderId,
+      providerPaymentId: checkoutId,
       providerPayload: payload as Record<string, unknown>,
-      providerStatusCode: payload.status ?? 'PAID',
+      providerStatusCode: payload.status ?? 'succeeded',
       providerMessage: 'Zenofy payment confirmed',
-      providerTransactionId: orderId,
+      providerTransactionId: paymentId,
       status: 'COMPLETED',
       success: true,
     };
@@ -165,9 +185,9 @@ export class ZenofyWebhookService {
     payload: ZenofyWebhookPayload
   ): Promise<void> {
     const providerMessage =
-      payload.event === 'order_refunded'
-        ? 'Zenofy order refunded'
-        : 'Zenofy order cancelled';
+      payload.event === 'payment.chargeback'
+        ? 'Zenofy payment chargeback'
+        : 'Zenofy payment refunded';
     const updated = await this.db.bookingCheckoutSession.updateMany({
       where: {
         id: session.id,
@@ -180,9 +200,9 @@ export class ZenofyWebhookService {
           PaymentMethod.CARD,
           {
             event: payload.event,
-            orderId: payload.orderId,
-            paymentId: payload.orderId,
-            paymentReference: payload.paymentReference,
+            orderId: payload.checkout_id,
+            paymentId: payload.checkout_id,
+            paymentReference: payload.payment_id,
             status: providerStatusCode,
           }
         ),

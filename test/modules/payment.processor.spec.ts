@@ -44,8 +44,8 @@ describe('PaymentProcessor', () => {
     };
     const updatedSession = {
       ...session,
-      checkoutUrl: 'https://pay.zenofy.io/o/order-1',
-      metadata: { zenofy: { paymentId: 'order-1' } },
+      checkoutUrl: 'https://pay.zenofy.io/c/checkout-1',
+      metadata: { zenofy: { paymentId: 'checkout-1' } },
     };
     const db = {
       bookingCheckoutSession: {
@@ -55,11 +55,11 @@ describe('PaymentProcessor', () => {
     };
     const provider = {
       charge: jest.fn().mockResolvedValue({
-        checkoutUrl: 'https://pay.zenofy.io/o/order-1',
+        checkoutUrl: 'https://pay.zenofy.io/c/checkout-1',
         providerMessage: 'Zenofy order created',
-        providerPaymentId: 'order-1',
+        providerPaymentId: 'checkout-1',
         providerStatusCode: 'PENDING',
-        providerTransactionId: 'order-1',
+        providerTransactionId: 'checkout-1',
         status: 'PENDING',
         success: true,
       }),
@@ -95,11 +95,11 @@ describe('PaymentProcessor', () => {
     expect(db.bookingCheckoutSession.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
       data: expect.objectContaining({
-        checkoutUrl: 'https://pay.zenofy.io/o/order-1',
+        checkoutUrl: 'https://pay.zenofy.io/c/checkout-1',
         metadata: expect.objectContaining({
           zenofy: expect.objectContaining({
-            orderId: 'order-1',
-            paymentId: 'order-1',
+            orderId: 'checkout-1',
+            paymentId: 'checkout-1',
             status: 'PENDING',
           }),
         }),

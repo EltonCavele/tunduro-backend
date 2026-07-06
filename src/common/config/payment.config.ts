@@ -22,6 +22,7 @@ export default registerAs(
       apiUrl: process.env.ZENOFY_API_URL ?? 'https://api.zenofy.io',
       bookingProductId: process.env.ZENOFY_BOOKING_PRODUCT_ID ?? '',
       checkoutApiKey: process.env.ZENOFY_CHECKOUT_API_KEY ?? '',
+      publicBaseUrl: process.env.ZENOFY_PUBLIC_BASE_URL ?? '',
       requestTimeoutMs: process.env.ZENOFY_REQUEST_TIMEOUT_MS
         ? Number.parseInt(process.env.ZENOFY_REQUEST_TIMEOUT_MS, 10)
         : 30000,

@@ -1,4 +1,9 @@
-import { BookingCheckoutSessionStatus, PaymentMethod, Prisma } from '@prisma/client';
+import { createHmac } from 'crypto';
+import {
+  BookingCheckoutSessionStatus,
+  PaymentMethod,
+  Prisma,
+} from '@prisma/client';
 
 import { ZenofyWebhookService } from 'src/modules/payment/services/zenofy-webhook.service';
 
@@ -18,7 +23,7 @@ describe('ZenofyWebhookService', () => {
     id: 'session-1',
     inviteEmails: null,
     lightingRequested: false,
-    metadata: { zenofy: { paymentId: 'order-1' } },
+    metadata: { zenofy: { paymentId: 'checkout-1' } },
     organizerId: 'user-1',
     paidAt: null,
     participantUserIds: null,
@@ -76,28 +81,33 @@ describe('ZenofyWebhookService', () => {
     };
   }
 
-  it('validates the shared webhook secret', () => {
+  it('validates the HMAC webhook signature', () => {
     const { service } = createService();
+    const rawBody = Buffer.from('{"event":"payment.succeeded"}');
+    const signature = `sha256=${createHmac('sha256', 'secret-1')
+      .update(rawBody)
+      .digest('hex')}`;
 
-    expect(service.verifySecret('secret-1')).toBe(true);
-    expect(service.verifySecret('wrong-secret')).toBe(false);
+    expect(service.verifySignature(rawBody, signature)).toBe(true);
+    expect(service.verifySignature(rawBody, 'sha256=wrong')).toBe(false);
   });
 
-  it('completes a booking checkout when Zenofy sends order_paid', async () => {
+  it('completes a booking checkout when Zenofy sends payment.succeeded', async () => {
     const { checkoutFinalizer, db, service } = createService();
 
     await service.handleWebhook({
-      event: 'order_paid',
-      orderId: 'order-1',
-      paymentReference: 'zenofy-ref-1',
-      status: 'PAID',
+      checkout_id: 'checkout-1',
+      event: 'payment.succeeded',
+      payment_id: 'pay-1',
+      reference: 'TUNDUROABC123',
+      status: 'succeeded',
     });
 
     expect(db.paymentTransaction.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           method: PaymentMethod.CARD,
-          providerTransactionId: 'order-1',
+          providerTransactionId: 'checkout-1',
         }),
       })
     );
@@ -106,9 +116,9 @@ describe('ZenofyWebhookService', () => {
       data: expect.objectContaining({
         metadata: expect.objectContaining({
           zenofy: expect.objectContaining({
-            orderId: 'order-1',
-            paymentReference: 'zenofy-ref-1',
-            status: 'PAID',
+            orderId: 'checkout-1',
+            paymentReference: 'pay-1',
+            status: 'succeeded',
           }),
         }),
       }),
@@ -120,14 +130,15 @@ describe('ZenofyWebhookService', () => {
     );
   });
 
-  it('cancels a pending checkout when Zenofy sends order_cancelled', async () => {
+  it('cancels a pending checkout when Zenofy sends payment.refunded', async () => {
     const { bookingNotifier, db, paymentTransactions, service } =
       createService();
 
     await service.handleWebhook({
-      event: 'order_cancelled',
-      orderId: 'order-1',
-      status: 'CANCELLED',
+      checkout_id: 'checkout-1',
+      event: 'payment.refunded',
+      payment_id: 'pay-1',
+      status: 'refunded',
     });
 
     expect(db.bookingCheckoutSession.updateMany).toHaveBeenCalledWith({
@@ -142,12 +153,12 @@ describe('ZenofyWebhookService', () => {
     expect(paymentTransactions.markCheckoutCancelled).toHaveBeenCalledWith(
       session,
       PaymentMethod.CARD,
-      'Zenofy order cancelled',
-      'CANCELLED'
+      'Zenofy payment refunded',
+      'refunded'
     );
     expect(bookingNotifier.notifyCheckoutFailed).toHaveBeenCalledWith(
       'session-1',
-      'Zenofy order cancelled'
+      'Zenofy payment refunded'
     );
   });
 });

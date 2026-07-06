@@ -13,10 +13,10 @@ import {
 } from '../payment.provider.interface';
 
 interface ZenofyCreateOrderResponse {
+  checkout_id?: string;
+  checkout_url?: string;
+  expires_at?: string;
   message?: string;
-  orderId?: string;
-  paymentPath?: string;
-  paymentUrl?: string;
   success?: boolean;
 }
 
@@ -63,18 +63,31 @@ export class ZenofyProvider implements IPaymentProvider {
       );
     }
 
+    const checkoutUrl = this.buildReturnUrl(
+      input.sessionId ?? input.reference,
+      input.reference
+    );
     const payload = {
+      amount: Math.round(input.amount * 100),
       currency: input.currency,
-      customerName: this.customerName(input.customerName),
-      email,
+      customer: {
+        email,
+        name: this.customerName(input.customerName),
+        phone: phoneNumber,
+      },
+      description: input.description ?? `Tunduro ${input.reference}`,
       language: 'pt',
-      phoneNumber,
+      payment_methods: ['card'],
       productId,
+      reference: input.reference,
+      ...(checkoutUrl
+        ? { cancel_url: checkoutUrl, success_url: checkoutUrl }
+        : {}),
     };
 
     try {
       const response = await axios.post<ZenofyCreateOrderResponse>(
-        `${this.apiUrl()}/checkout/order-from-product`,
+        `${this.apiUrl()}/checkout/order-api-gateway`,
         payload,
         {
           headers: this.headers(apiKey),
@@ -142,6 +155,62 @@ export class ZenofyProvider implements IPaymentProvider {
     );
   }
 
+  private buildReturnUrl(
+    sessionId: string,
+    reference: string
+  ): string | undefined {
+    const url = this.buildPublicUrl('/v1/payments/zenofy/return');
+    if (!url) {
+      return undefined;
+    }
+
+    url.searchParams.set('sessionId', sessionId);
+    url.searchParams.set('reference', reference);
+    return url.toString();
+  }
+
+  private buildPublicUrl(pathname: string): URL | undefined {
+    const configuredBase = this.configService
+      .get<string>('payment.zenofy.publicBaseUrl')
+      ?.trim();
+    const paysuiteBase = this.configService
+      .get<string>('payment.paysuite.publicBaseUrl')
+      ?.trim();
+    const paysuiteCallback = this.configService
+      .get<string>('payment.paysuite.callbackUrl')
+      ?.trim();
+    const base =
+      configuredBase || paysuiteBase || this.getOrigin(paysuiteCallback);
+    if (!base) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(pathname, base.endsWith('/') ? base : `${base}/`);
+      if (url.protocol !== 'https:') {
+        this.logger.warn('Zenofy return URL ignored because it is not HTTPS');
+        return undefined;
+      }
+      return url;
+    } catch {
+      this.logger.warn('Zenofy return URL ignored because it is invalid');
+      return undefined;
+    }
+  }
+
+  private getOrigin(value: string | undefined): string {
+    if (!value) {
+      return '';
+    }
+
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' ? url.origin : '';
+    } catch {
+      return '';
+    }
+  }
+
   private headers(apiKey: string): Record<string, string> {
     return {
       Accept: 'application/json',
@@ -156,7 +225,11 @@ export class ZenofyProvider implements IPaymentProvider {
   }
 
   private mapCreateResponse(response: ZenofyCreateOrderResponse): ChargeResult {
-    if (!response.success || !response.orderId || !response.paymentUrl) {
+    if (
+      response.success === false ||
+      !response.checkout_id ||
+      !response.checkout_url
+    ) {
       return this.failure(
         'INVALID_RESPONSE',
         response.message ?? 'payment.error.gatewayUnavailable'
@@ -164,12 +237,12 @@ export class ZenofyProvider implements IPaymentProvider {
     }
 
     return {
-      checkoutUrl: response.paymentUrl,
-      providerPaymentId: response.orderId,
+      checkoutUrl: response.checkout_url,
+      providerPaymentId: response.checkout_id,
       providerPayload: response as Record<string, unknown>,
       providerStatusCode: 'PENDING',
       providerMessage: 'Zenofy order created',
-      providerTransactionId: response.orderId,
+      providerTransactionId: response.checkout_id,
       status: 'PENDING',
       success: true,
     };
@@ -199,14 +272,15 @@ export class ZenofyProvider implements IPaymentProvider {
 
   private mapStatus(status: string | undefined): ChargeOutcomeStatus {
     const normalized = status?.trim().toUpperCase();
-    if (normalized === 'PAID') {
+    if (normalized === 'PAID' || normalized === 'SUCCEEDED') {
       return 'COMPLETED';
     }
     if (
       normalized === 'CANCELLED' ||
       normalized === 'CANCELED' ||
       normalized === 'EXPIRED' ||
-      normalized === 'REFUNDED'
+      normalized === 'REFUNDED' ||
+      normalized === 'CHARGEBACK'
     ) {
       return 'FAILED';
     }
