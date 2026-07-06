@@ -315,8 +315,8 @@ export class BookingCheckoutFinalizerService {
   ): Promise<void> {
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(
-        ${COURT_SCHEDULE_LOCK_NAMESPACE},
-        hashtext(${courtId})
+        ${COURT_SCHEDULE_LOCK_NAMESPACE}::int,
+        hashtext(${courtId})::int
       )
     `;
   }
