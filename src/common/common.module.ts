@@ -54,7 +54,7 @@ import { ResponseModule } from './response/response.module';
           host: configService.get('redis.host'),
           port: Number(configService.get('redis.port')),
           password: configService.get('redis.password'),
-          maxRetriesPerRequest: 2,
+          maxRetriesPerRequest: 10000,
           enableReadyCheck: false,
           connectTimeout: 5000,
         },

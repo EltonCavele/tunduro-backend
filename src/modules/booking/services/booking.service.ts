@@ -91,7 +91,16 @@ export class BookingService {
       metadata: { createdByAdmin: adminUser.userId },
     });
 
-    await this.bookingNotifier.notifyCheckoutCreatedByAdmin(session.id);
+    console.log('session', session);
+    // void this.bookingNotifier
+    //   .notifyCheckoutCreatedByAdmin(session.id)
+    //   .catch(error => {
+    //     this.logger.warn(
+    //       `Failed to notify admin-created checkout ${session.id}: ${
+    //         (error as Error)?.message ?? 'unknown'
+    //       }`
+    //     );
+    //   });
 
     return session;
   }

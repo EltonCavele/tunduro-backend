@@ -66,6 +66,12 @@ export class BookingCheckoutService {
     metadata: Prisma.InputJsonValue | null;
   }): Promise<BookingCheckoutSessionResponseDto> {
     const { organizerId, dto, metadata } = args;
+    const isAdminCreated = Boolean(
+      metadata &&
+        typeof metadata === 'object' &&
+        !Array.isArray(metadata) &&
+        (metadata as Record<string, unknown>).createdByAdmin
+    );
     const method = dto.paymentMethod ?? PaymentMethod.MPESA;
     this.assertSupportedCheckoutMethod(method);
 
@@ -79,9 +85,11 @@ export class BookingCheckoutService {
     }
     const phone =
       method === PaymentMethod.CARD
-        ? normalizeZenofyPhoneNumber(organizer.phone)
+        ? normalizeZenofyPhoneNumber(organizer.phone) ||
+          (isAdminCreated ? normalizeZenofyPhoneNumber(dto.phone) : null)
         : dto.phone?.trim() || null;
-    if (method === PaymentMethod.CARD && !phone) {
+
+    if (method === PaymentMethod.CARD && !phone && !isAdminCreated) {
       throw new HttpException(
         'payment.error.cardPhoneRequired',
         HttpStatus.BAD_REQUEST
@@ -104,12 +112,7 @@ export class BookingCheckoutService {
       throw new HttpException('booking.error.invalid', HttpStatus.BAD_REQUEST);
     }
 
-    const skipContactValidation = Boolean(
-      metadata &&
-        typeof metadata === 'object' &&
-        !Array.isArray(metadata) &&
-        (metadata as Record<string, unknown>).createdByAdmin === true
-    );
+    const skipContactValidation = isAdminCreated;
     const preparedInvites =
       await this.bookingInviteContactService.prepareCheckoutInvites({
         organizerId,
@@ -439,6 +442,7 @@ export class BookingCheckoutService {
     try {
       await this.paymentQueue.enqueueCharge(sessionId);
     } catch (error) {
+      console.error(error, 'ERROR');
       this.logger.error(
         `Failed to enqueue ${
           isExtension ? 'extension ' : ''
